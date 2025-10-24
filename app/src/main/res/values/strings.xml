@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">anyapk</string>
+    <string name="status_checking">Checking ADB connection status…</string>
+    <string name="status_ready">✅ Ready to Install APKs\n\nOpen any APK file and select anyapk</string>
+    <string name="status_needs_dev_mode">⚠️ Setup Required\n\nStep 1: Enable Developer Options\n  • Open Settings → About Phone\n  • Tap \"Build Number\" 7 times\n  • You\'ll see \"You are now a developer!\"\n\nStep 2: Enable Wireless Debugging\n  • Go to Settings → Developer Options\n  • Enable \"Wireless debugging\"\n\nStep 3: Pair with anyapk\n  • Tap \"Enter Pairing Code\" below</string>
+    <string name="status_needs_pairing">⚠️ Pairing Required\n\nSteps:\n1. Open Settings → Developer Options\n2. Ensure \"Wireless debugging\" is ON\n3. Tap \"Pair device with pairing code\"\n4. Tap \"Enter Pairing Code\" below\n5. Use split-screen to keep both apps visible\n6. Enter the code and port</string>
+    <string name="status_needs_setup">⚠️ Pairing Required\n\n1. Enable \"Wireless debugging\" in Developer Options\n2. Tap \"Enter Pairing Code\" below\n3. Follow pairing instructions</string>
+    <string name="btn_open_settings">Open Developer Settings</string>
+    <string name="btn_enter_code">Enter Pairing Code</string>
+    <string name="btn_connected">Connected</string>
+    <string name="btn_waiting">Waiting…</string>
+    <string name="btn_install">Install APK</string>
+    <string name="pairing_title">Pair with ADB</string>
+    <string name="pairing_message">📱 IMPORTANT: Use Split Screen!\n\n1. Tap the Recent Apps button (square)\n2. Long-press on Settings, select \"Open in split screen view\"\n3. Select anyapk for the other half\n4. In Settings: Developer Options → Wireless Debugging\n5. Tap \"Pair device with pairing code\"\n6. Enter the code and port below\n\nWith split screen, the pairing dialog stays visible!</string>
+    <string name="pairing_code_hint">Pairing Code (e.g., 123456)</string>
+    <string name="pairing_port_hint">Port (e.g., 37853)</string>
+    <string name="auth_prompt_message">After pairing, you should see an \"Allow USB debugging?\" prompt. Tap \"Always allow from this computer\" then \"Allow\".</string>
+    <string name="btn_pair">Pair</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="install_ready">Ready to install:\n%s</string>
+    <string name="installing">Installing…</string>
+    <string name="install_success">✅ Installed successfully!</string>
+    <string name="install_failed">❌ Install failed: %s</string>
+    <string name="error_no_apk">No APK provided</string>
+    <string name="error_adb_not_running">Shizuku not running</string>
+    <string name="error_no_permission">ADB permission not granted</string>
+    <string name="error_invalid_code">Invalid code or port</string>
+    <string name="pairing_success">✅ Paired successfully!</string>
+    <string name="pairing_failed">❌ Pairing failed: %s</string>
+    <string name="btn_select_apk">Select APK to Install</string>
+</resources>
