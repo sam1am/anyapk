@@ -175,7 +175,7 @@ Your activity is your business, not ours.
 
 ## License
 
-This project is open source. Use it, modify it, share it. Free software for free people.
+This project is open source under the Apache 2.0 license. Use it, modify it, share it. Free software for free people.
 
 ## Contributing
 
