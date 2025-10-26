@@ -16,13 +16,26 @@
         android:layout_marginBottom="32dp"
         android:lineSpacingExtra="4dp" />
 
-    <Button
-        android:id="@+id/actionButton"
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/btn_waiting"
-        android:minWidth="200dp"
-        android:layout_marginBottom="16dp" />
+        android:orientation="horizontal">
+        <Button
+            android:id="@+id/actionButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_waiting"
+            android:minWidth="200dp"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/refreshButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_refresh"
+            android:minWidth="200dp"
+            android:layout_marginBottom="16dp" />
+    </LinearLayout>
 
     <Button
         android:id="@+id/testConnectionButton"
