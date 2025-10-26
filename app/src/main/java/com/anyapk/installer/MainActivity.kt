@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var statusText: TextView
     private lateinit var actionButton: Button
+    private lateinit var refreshButton: Button
     private lateinit var testConnectionButton: Button
     private lateinit var selectApkButton: Button
 
@@ -38,11 +39,16 @@ class MainActivity : AppCompatActivity() {
 
         statusText = findViewById(R.id.statusText)
         actionButton = findViewById(R.id.actionButton)
+        refreshButton = findViewById(R.id.refreshButton)
         testConnectionButton = findViewById(R.id.testConnectionButton)
         selectApkButton = findViewById(R.id.selectApkButton)
 
         actionButton.setOnClickListener {
             showPairingDialog()
+        }
+
+        refreshButton.setOnClickListener {
+            checkStatus()
         }
 
         testConnectionButton.setOnClickListener {
@@ -73,6 +79,7 @@ class MainActivity : AppCompatActivity() {
                     actionButton.isEnabled = false
                     actionButton.text = getString(R.string.btn_connected)
                     testConnectionButton.visibility = Button.GONE
+                    refreshButton.visibility = Button.GONE
                     selectApkButton.visibility = Button.VISIBLE
                 }
                 else -> {

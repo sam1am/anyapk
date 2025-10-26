@@ -18,7 +18,7 @@ class PairingDialogFragment : DialogFragment() {
 
         return AlertDialog.Builder(requireContext())
             .setTitle(getString(R.string.pairing_title))
-            .setMessage(getString(R.string.pairing_message))
+            //.setMessage(getString(R.string.pairing_message))
             .setView(view)
             .setPositiveButton(getString(R.string.btn_pair)) { _, _ ->
                 val code = codeInput.text.toString()

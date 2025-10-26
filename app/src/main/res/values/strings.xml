@@ -29,4 +29,5 @@
     <string name="pairing_success">✅ Paired successfully!</string>
     <string name="pairing_failed">❌ Pairing failed: %s</string>
     <string name="btn_select_apk">Select APK to Install</string>
+    <string name="btn_refresh">Refresh</string>
 </resources>
