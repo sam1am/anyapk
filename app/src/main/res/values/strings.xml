@@ -4,7 +4,7 @@
     <string name="status_checking">Checking ADB connection status…</string>
     <string name="status_ready">✅ Ready to Install APKs\n\nOpen any APK file and select anyapk</string>
     <string name="status_needs_dev_mode">⚠️ Setup Required\n\nStep 1: Enable Developer Options\n  • Open Settings → About Phone\n  • Tap \"Build Number\" 7 times\n  • You\'ll see \"You are now a developer!\"\n\nStep 2: Enable Wireless Debugging\n  • Go to Settings → Developer Options\n  • Enable \"Wireless debugging\"\n\nStep 3: Pair with anyapk\n  • Tap \"Enter Pairing Code\" below</string>
-    <string name="status_needs_pairing">⚠️ Pairing Required\n\nSteps:\n1. Open Settings → Developer Options\n2. Ensure \"Wireless debugging\" is ON\n3. Tap \"Pair device with pairing code\"\n4. Tap \"Enter Pairing Code\" below\n5. Use split-screen to keep both apps visible\n6. Enter the code and port</string>
+    <string name="status_needs_pairing">⚠️ Pairing Required\n\nSteps:\n1. Tap \"Enter Pairing Code\" below\n2. Go to Settings → Developer Options → Wireless Debugging\n3. Tap \"Pair device with pairing code\"\n4. Swipe down from top to see the notification\n5. Tap \"Reply\" and enter: CODE PORT\n   Example: 123456 37829</string>
     <string name="status_needs_setup">⚠️ Pairing Required\n\n1. Enable \"Wireless debugging\" in Developer Options\n2. Tap \"Enter Pairing Code\" below\n3. Follow pairing instructions</string>
     <string name="btn_open_settings">Open Developer Settings</string>
     <string name="btn_enter_code">Enter Pairing Code</string>

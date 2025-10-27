@@ -1,7 +1,10 @@
 package com.anyapk.installer
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
@@ -9,6 +12,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -43,10 +48,6 @@ class MainActivity : AppCompatActivity() {
         testConnectionButton = findViewById(R.id.testConnectionButton)
         selectApkButton = findViewById(R.id.selectApkButton)
 
-        actionButton.setOnClickListener {
-            showPairingDialog()
-        }
-
         refreshButton.setOnClickListener {
             checkStatus()
         }
@@ -72,30 +73,109 @@ class MainActivity : AppCompatActivity() {
             }
 
             val isDeveloperModeEnabled = isDeveloperOptionsEnabled()
+            val hasNotificationPermission = checkNotificationPermission()
 
             when (status) {
                 AdbInstaller.ConnectionStatus.CONNECTED -> {
-                    statusText.text = getString(R.string.status_ready)
-                    actionButton.isEnabled = false
-                    actionButton.text = getString(R.string.btn_connected)
-                    testConnectionButton.visibility = Button.GONE
-                    refreshButton.visibility = Button.GONE
-                    selectApkButton.visibility = Button.VISIBLE
+                    showConnectedState()
                 }
                 else -> {
-                    // Show appropriate pairing instructions based on developer mode
-                    statusText.text = if (isDeveloperModeEnabled) {
-                        getString(R.string.status_needs_pairing)
-                    } else {
-                        getString(R.string.status_needs_dev_mode)
-                    }
-                    actionButton.isEnabled = true
-                    actionButton.text = getString(R.string.btn_enter_code)
-                    testConnectionButton.visibility = Button.GONE
-                    selectApkButton.visibility = Button.GONE
+                    showSetupChecklist(isDeveloperModeEnabled, hasNotificationPermission)
                 }
             }
         }
+    }
+
+    private fun checkNotificationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            // On older Android versions, notification permission is auto-granted
+            true
+        }
+    }
+
+    private fun showConnectedState() {
+        statusText.text = "✅ Ready to Install APKs\n\nYou're all set! Open any APK file and select anyapk to install."
+        actionButton.isEnabled = false
+        actionButton.text = getString(R.string.btn_connected)
+        testConnectionButton.visibility = Button.GONE
+        refreshButton.visibility = Button.GONE
+        selectApkButton.visibility = Button.VISIBLE
+    }
+
+    private fun showSetupChecklist(devModeEnabled: Boolean, notificationPermission: Boolean) {
+        val step1 = if (devModeEnabled) "✅" else "⬜"
+        val step2 = if (notificationPermission) "✅" else "⬜"
+        val step3 = if (devModeEnabled && notificationPermission) "⬜" else "⚪"
+
+        val message = buildString {
+            append("Setup Progress:\n\n")
+
+            // Step 1: Developer Options
+            append("$step1 Step 1: Enable Developer Options\n")
+            if (!devModeEnabled) {
+                append("   • Open Settings → About Phone\n")
+                append("   • Tap \"Build Number\" 7 times\n\n")
+            } else {
+                append("   Complete!\n\n")
+            }
+
+            // Step 2: Notification Permission
+            append("$step2 Step 2: Grant Notification Permission\n")
+            if (!notificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                append("   • Required to enter pairing codes\n")
+                append("   • Tap button below to grant\n\n")
+            } else {
+                append("   Complete!\n\n")
+            }
+
+            // Step 3: Pairing
+            append("$step3 Step 3: Pair with Wireless ADB\n")
+            if (devModeEnabled && notificationPermission) {
+                append("   • Tap \"Start Pairing\" below\n")
+                append("   • Enter code from Settings notification\n")
+            } else {
+                append("   Complete previous steps first\n")
+            }
+        }
+
+        statusText.text = message
+
+        // Configure button based on current step
+        when {
+            !notificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
+                actionButton.text = "Grant Notification Permission"
+                actionButton.isEnabled = true
+                actionButton.setOnClickListener {
+                    requestNotificationPermission()
+                }
+            }
+            devModeEnabled && notificationPermission -> {
+                actionButton.text = "Start Pairing"
+                actionButton.isEnabled = true
+                actionButton.setOnClickListener {
+                    showPairingDialog()
+                }
+            }
+            !devModeEnabled -> {
+                actionButton.text = "Open Settings"
+                actionButton.isEnabled = true
+                actionButton.setOnClickListener {
+                    try {
+                        startActivity(Intent(Settings.ACTION_SETTINGS))
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Please open Settings manually", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
+        testConnectionButton.visibility = Button.GONE
+        selectApkButton.visibility = Button.GONE
     }
 
     private fun isDeveloperOptionsEnabled(): Boolean {
@@ -112,8 +192,69 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showPairingDialog() {
-        val dialog = PairingDialogFragment()
-        dialog.show(supportFragmentManager, "pairing")
+        // Start pairing input service with RemoteInput notification
+        val serviceIntent = Intent(this, PairingInputService::class.java)
+        startService(serviceIntent)
+
+        // Try to open Developer Options directly
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+            startActivity(intent)
+        } catch (e: Exception) {
+            // If that fails, just open main settings
+            try {
+                val intent = Intent(Settings.ACTION_SETTINGS)
+                startActivity(intent)
+            } catch (ex: Exception) {
+                Toast.makeText(
+                    this,
+                    "Please open Settings → Developer Options → Wireless Debugging manually",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        Toast.makeText(
+            this,
+            "Go to Wireless Debugging, tap 'Pair device', then swipe down and enter the code in the notification",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_NOTIFICATION_PERMISSION
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == REQUEST_NOTIFICATION_PERMISSION) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(
+                    this,
+                    "✅ Notification permission granted!",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Notification permission is required for pairing. Please enable it in Settings.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            // Refresh status to update checklist
+            checkStatus()
+        }
     }
 
     fun refreshStatus() {
@@ -143,5 +284,9 @@ class MainActivity : AppCompatActivity() {
                 testConnectionButton.text = "Test Connection"
             }
         }
+    }
+
+    companion object {
+        private const val REQUEST_NOTIFICATION_PERMISSION = 1002
     }
 }

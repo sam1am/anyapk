@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
         android:allowBackup="true"
@@ -44,6 +46,21 @@
                 <data android:scheme="file" />
             </intent-filter>
         </activity>
+
+        <!-- Pairing Input Service with RemoteInput -->
+        <service
+            android:name=".PairingInputService"
+            android:exported="false"
+            android:foregroundServiceType="shortService" />
+
+        <!-- Pairing Input Receiver -->
+        <receiver
+            android:name=".PairingInputReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.anyapk.installer.PAIRING_INPUT" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
