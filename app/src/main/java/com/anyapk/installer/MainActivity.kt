@@ -213,12 +213,6 @@ class MainActivity : AppCompatActivity() {
                 ).show()
             }
         }
-
-        Toast.makeText(
-            this,
-            "Go to Wireless Debugging, tap 'Pair device', then swipe down and enter the code in the notification",
-            Toast.LENGTH_LONG
-        ).show()
     }
 
     private fun requestNotificationPermission() {

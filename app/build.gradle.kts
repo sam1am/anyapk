@@ -19,7 +19,7 @@ android {
 
     defaultConfig {
         applicationId = "com.anyapk.installer"
-        minSdk = 23
+        minSdk = 30
         targetSdk = 34
         versionCode = 5
         versionName = "0.0.5"

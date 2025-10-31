@@ -176,6 +176,7 @@ Your activity is your business, not ours.
 ## License
 
 This project is open source under the Apache 2.0 license. Use it, modify it, share it. Free software for free people.
+It uses AdbMdns class from [Shizuku](https://github.com/RikkaApps/Shizuku/blob/master/manager/src/main/java/moe/shizuku/manager/adb/AdbMdns.kt), published under Apache 2.0 license.
 
 ## Contributing
 
