@@ -54,13 +54,4 @@
         android:layout_marginTop="16dp"
         android:visibility="gone" />
 
-    <Button
-        android:id="@+id/checkUpdateButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Check for Updates"
-        android:minWidth="200dp"
-        android:layout_marginTop="32dp"
-        style="@style/Widget.Material3.Button.TextButton" />
-
 </LinearLayout>

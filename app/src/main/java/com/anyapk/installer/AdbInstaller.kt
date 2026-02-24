@@ -9,6 +9,13 @@ object AdbInstaller {
     private const val LOCALHOST = "127.0.0.1"
     private const val DEFAULT_PORT = 5555
 
+    /**
+     * Gets the target IP address from settings, falling back to localhost
+     */
+    private fun getTargetIp(context: Context): String {
+        return SettingsManager.getTargetIpAddress(context) ?: LOCALHOST
+    }
+
     enum class ConnectionStatus {
         NOT_CONNECTED,
         CONNECTED,
@@ -75,8 +82,9 @@ object AdbInstaller {
     suspend fun pair(context: Context, pairingCode: String, pairingPort: Int): Result<Boolean> = withContext(Dispatchers.IO) {
         return@withContext try {
             val manager = AdbConnectionManager.getInstance(context)
-            // Pair with the device
-            manager.pair(LOCALHOST, pairingPort, pairingCode)
+            // Pair with the device using configured IP address
+            val targetIp = getTargetIp(context)
+            manager.pair(targetIp, pairingPort, pairingCode)
             Result.success(true)
         } catch (e: Exception) {
             e.printStackTrace()
