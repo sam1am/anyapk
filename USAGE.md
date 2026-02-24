@@ -1,17 +1,8 @@
 # anyapk - Usage Guide
 
-## What You've Built
-
-**anyapk** is a revolutionary Android APK installer that bypasses Google's developer verification requirements by using local ADB connections. This allows you to install any APK, regardless of its verification status.
-
 ## Installation
 
-1. The debug APK has been built and is located at:
-   ```
-   app/build/outputs/apk/debug/app-debug.apk
-   ```
-
-2. Transfer this APK to your Android device and install it (you'll need to enable "Install from unknown sources" for this first installation).
+1. Transfer this APK to your Android device and install it (you'll need to enable "Install from unknown sources" for this first installation).
 
 ## First-Time Setup
 
@@ -143,10 +134,6 @@ Since anyapk itself will need developer verification to be widely distributed, c
 - Report issues on GitHub
 - Contributions welcome via pull requests
 - See README.md for more technical details
-
-## License
-
-[To be determined]
 
 ---
 

@@ -1,8 +1,8 @@
 # anyapk
 
-**The last app you'll ever need to install the hard way.**
+**Bypass Google And Install Any APK You Want On The Device You Own.**
 
-anyapk is a lightweight Android application installer that bypasses Google's developer verification requirements by using local ADB (Android Debug Bridge) connections. Install any APK file on your device without restrictions, gatekeepers, or corporate approval.
+anyapk is a lightweight Android application installer that bypasses Google's developer verification requirements by using local ADB (Android Debug Bridge) connections. Smoothly install any APK file on your device without restrictions, gatekeepers, or corporate approval.
 
 ## Why We Made This
 
