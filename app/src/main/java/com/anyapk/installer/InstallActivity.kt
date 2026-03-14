@@ -2,27 +2,27 @@ package com.anyapk.installer
 
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Button
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.anyapk.installer.databinding.ActivityInstallBinding
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 
 class InstallActivity : AppCompatActivity() {
 
+
+    private var _binding: ActivityInstallBinding? = null
+    private val binding get() = _binding!!
+
     private lateinit var apkUri: Uri
-    private lateinit var infoText: TextView
-    private lateinit var installButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_install)
 
-        infoText = findViewById(R.id.infoText)
-        installButton = findViewById(R.id.installButton)
+        _binding = ActivityInstallBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         // Get APK from intent
         apkUri = intent.data ?: run {
@@ -32,10 +32,12 @@ class InstallActivity : AppCompatActivity() {
         }
 
         val fileName = apkUri.lastPathSegment ?: "Unknown APK"
-        infoText.text = getString(R.string.install_ready, fileName)
+        binding.apply {
+            infoText.text = getString(R.string.install_ready, fileName)
 
-        installButton.setOnClickListener {
-            installApk()
+            installButton.setOnClickListener {
+                installApk()
+            }
         }
     }
 
@@ -54,8 +56,10 @@ class InstallActivity : AppCompatActivity() {
                 }
 
                 // Install using ADB
-                installButton.isEnabled = false
-                infoText.text = getString(R.string.installing)
+                binding.apply {
+                    installButton.isEnabled = false
+                    infoText.text = getString(R.string.installing)
+                }
 
                 val result = AdbInstaller.install(this@InstallActivity, tempFile.absolutePath)
 
@@ -68,16 +72,23 @@ class InstallActivity : AppCompatActivity() {
                 result.onFailure { error ->
                     val errorMsg = error.message ?: "Unknown error"
                     Toast.makeText(this@InstallActivity, getString(R.string.install_failed, errorMsg), Toast.LENGTH_LONG).show()
-                    installButton.isEnabled = true
-                    infoText.text = getString(R.string.install_failed, errorMsg)
+                    binding.apply {
+                        installButton.isEnabled = true
+                        infoText.text = getString(R.string.install_failed, errorMsg)
+                    }
                     tempFile.delete()
                 }
 
             } catch (e: Exception) {
                 Toast.makeText(this@InstallActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                installButton.isEnabled = true
+                binding.installButton.isEnabled = true
                 e.printStackTrace()
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        _binding = null
     }
 }
