@@ -8,25 +8,23 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.anyapk.installer.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var statusText: TextView
-    private lateinit var actionButton: Button
-    private lateinit var refreshButton: Button
-    private lateinit var testConnectionButton: Button
-    private lateinit var selectApkButton: Button
-    private lateinit var checkUpdateButton: Button
+    private var _binding: ActivityMainBinding? = null
+
+    private val binding get() = _binding!!
+
 
     private val selectApkLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
@@ -41,29 +39,26 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
 
-        statusText = findViewById(R.id.statusText)
-        actionButton = findViewById(R.id.actionButton)
-        refreshButton = findViewById(R.id.refreshButton)
-        testConnectionButton = findViewById(R.id.testConnectionButton)
-        selectApkButton = findViewById(R.id.selectApkButton)
-        checkUpdateButton = findViewById(R.id.checkUpdateButton)
+        _binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-        refreshButton.setOnClickListener {
-            checkStatus()
-        }
+        binding.apply {
+            refreshButton.setOnClickListener {
+                checkStatus()
+            }
 
-        testConnectionButton.setOnClickListener {
-            testConnection()
-        }
+            testConnectionButton.setOnClickListener {
+                testConnection()
+            }
 
-        selectApkButton.setOnClickListener {
-            selectApkLauncher.launch("application/vnd.android.package-archive")
-        }
+            selectApkButton.setOnClickListener {
+                selectApkLauncher.launch("application/vnd.android.package-archive")
+            }
 
-        checkUpdateButton.setOnClickListener {
-            checkForUpdates()
+            checkUpdateButton.setOnClickListener {
+                checkForUpdates()
+            }
         }
     }
 
@@ -105,12 +100,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showConnectedState() {
-        statusText.text = "✅ Ready to Install APKs\n\nYou're all set! Open any APK file and select anyapk to install."
-        actionButton.isEnabled = false
-        actionButton.text = getString(R.string.btn_connected)
-        testConnectionButton.visibility = Button.GONE
-        refreshButton.visibility = Button.GONE
-        selectApkButton.visibility = Button.VISIBLE
+        binding.apply {
+            statusText.text =
+                "✅ Ready to Install APKs\n\nYou're all set! Open any APK file and select anyapk to install."
+            actionButton.isEnabled = false
+            actionButton.text = getString(R.string.btn_connected)
+            testConnectionButton.visibility = Button.GONE
+            refreshButton.visibility = Button.GONE
+            selectApkButton.visibility = Button.VISIBLE
+        }
     }
 
     private fun showSetupChecklist(devModeEnabled: Boolean, notificationPermission: Boolean) {
@@ -149,39 +147,50 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        statusText.text = message
+        binding.statusText.text = message
 
         // Configure button based on current step
         when {
             !notificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
-                actionButton.text = "Grant Notification Permission"
-                actionButton.isEnabled = true
-                actionButton.setOnClickListener {
-                    requestNotificationPermission()
+                binding.apply {
+                    actionButton.text = "Grant Notification Permission"
+                    actionButton.isEnabled = true
+                    actionButton.setOnClickListener {
+                        requestNotificationPermission()
+                    }
                 }
             }
             devModeEnabled && notificationPermission -> {
-                actionButton.text = "Start Pairing"
-                actionButton.isEnabled = true
-                actionButton.setOnClickListener {
-                    showPairingDialog()
+                binding.apply {
+                    actionButton.text = "Start Pairing"
+                    actionButton.isEnabled = true
+                    actionButton.setOnClickListener {
+                        showPairingDialog()
+                    }
                 }
             }
             !devModeEnabled -> {
-                actionButton.text = "Open Settings"
-                actionButton.isEnabled = true
-                actionButton.setOnClickListener {
-                    try {
-                        startActivity(Intent(Settings.ACTION_SETTINGS))
-                    } catch (e: Exception) {
-                        Toast.makeText(this, "Please open Settings manually", Toast.LENGTH_SHORT).show()
+                binding.apply {
+                    actionButton.text = "Open Settings"
+                    actionButton.isEnabled = true
+                    actionButton.setOnClickListener {
+                        try {
+                            startActivity(Intent(Settings.ACTION_SETTINGS))
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Please open Settings manually",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
                 }
             }
         }
-
-        testConnectionButton.visibility = Button.GONE
-        selectApkButton.visibility = Button.GONE
+        binding.apply {
+            testConnectionButton.visibility = Button.GONE
+            selectApkButton.visibility = Button.GONE
+        }
     }
 
     private fun isDeveloperOptionsEnabled(): Boolean {
@@ -268,13 +277,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun showTestConnectionButton() {
-        testConnectionButton.visibility = Button.VISIBLE
-        statusText.text = "⚠️ Authorization Required\n\nTap 'Test Connection' below to trigger the USB debugging authorization prompt. Make sure to check 'Always allow' and tap 'Allow'."
+        binding.apply {
+            testConnectionButton.visibility = Button.VISIBLE
+            statusText.text =
+                "⚠️ Authorization Required\n\nTap 'Test Connection' below to trigger the USB debugging authorization prompt. Make sure to check 'Always allow' and tap 'Allow'."
+        }
     }
 
     private fun testConnection() {
-        testConnectionButton.isEnabled = false
-        testConnectionButton.text = "Testing..."
+        binding.apply {
+            testConnectionButton.isEnabled = false
+            testConnectionButton.text = "Testing..."
+        }
 
         lifecycleScope.launch {
             val result = AdbInstaller.testConnection(this@MainActivity)
@@ -286,15 +300,19 @@ class MainActivity : AppCompatActivity() {
 
             result.onFailure { error ->
                 Toast.makeText(this@MainActivity, "❌ Authorization failed: ${error.message}\n\nMake sure you tapped 'Always allow' on the prompt.", Toast.LENGTH_LONG).show()
-                testConnectionButton.isEnabled = true
-                testConnectionButton.text = "Test Connection"
+                binding.apply {
+                    testConnectionButton.isEnabled = true
+                    testConnectionButton.text = "Test Connection"
+                }
             }
         }
     }
 
     private fun checkForUpdates() {
-        checkUpdateButton.isEnabled = false
-        checkUpdateButton.text = "Checking..."
+        binding.apply {
+            checkUpdateButton.isEnabled = false
+            checkUpdateButton.text = "Checking..."
+        }
 
         lifecycleScope.launch {
             val updateInfo = UpdateChecker.checkForUpdate(this@MainActivity)
@@ -308,9 +326,10 @@ class MainActivity : AppCompatActivity() {
                     Toast.LENGTH_SHORT
                 ).show()
             }
-
-            checkUpdateButton.isEnabled = true
-            checkUpdateButton.text = "Check for Updates"
+            binding.apply {
+                checkUpdateButton.isEnabled = true
+                checkUpdateButton.text = "Check for Updates"
+            }
         }
     }
 
@@ -382,6 +401,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        _binding = null
+    }
     companion object {
         private const val REQUEST_NOTIFICATION_PERMISSION = 1002
     }
