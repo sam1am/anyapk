@@ -161,45 +161,56 @@ object AdbInstaller {
             val apkFile = java.io.File(apkPath)
             val apkSize = apkFile.length()
 
-            // Open install stream with size
-            stream = manager.openStream("exec:cmd package install -S $apkSize")
+            // Open install stream with size (Bypass target SDK block on Android 14+) (((NEW CODE 2026)))
+            val installCmd = if (android.os.Build.VERSION.SDK_INT >= 34) {
+                "exec:cmd package install --bypass-low-target-sdk-block -S $apkSize"
+            } else {
+                "exec:cmd package install -S $apkSize"
+            }
+            stream = manager.openStream(installCmd)
 
-            // Stream the APK data
+            // Stream the APK data (((NEW CODE 2026)))
             val outputStream = stream.openOutputStream()
-            java.io.FileInputStream(apkFile).use { input ->
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    outputStream.write(buffer, 0, bytesRead)
+            try {
+                java.io.FileInputStream(apkFile).use { input ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        outputStream.write(buffer, 0, bytesRead)
+                    }
+                    outputStream.flush()
                 }
-                outputStream.flush()
+            } finally {
+                // Mandatory closure: Notify that the shipment has been completed
+                try { outputStream.close() } catch (e: Exception) { e.printStackTrace() }
             }
 
             // Read the response
             val output = StringBuilder()
             val inputStream = stream.openInputStream()
-            val buffer = ByteArray(1024)
-            var bytesRead: Int
-            var totalWait = 0
-            val maxWait = 30000 // 30 seconds for install
-
-            // Read with timeout
-            while (totalWait < maxWait) {
-                if (inputStream.available() > 0) {
-                    bytesRead = inputStream.read(buffer)
-                    if (bytesRead > 0) {
+            try {
+                // We have reinstated the 30-second safety limit
+                kotlinx.coroutines.withTimeout(30000) {
+                    val buffer = ByteArray(1024)
+                    var bytesRead: Int
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                         output.append(String(buffer, 0, bytesRead))
-                    }
-                    if (bytesRead == -1) break
-                } else {
-                    kotlinx.coroutines.delay(100)
-                    totalWait += 100
-                    // Check if we got a complete response
-                    val currentOutput = output.toString()
-                    if (currentOutput.contains("Success") || currentOutput.contains("Failure")) {
-                        break
+
+                        // Safe correction for searching for the keyword
+                        val currentOutput = output.toString()
+                        if (currentOutput.contains("Success") || currentOutput.contains("Failure")) {
+                            break
+                        }
                     }
                 }
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                // If there is no response within 30 seconds, we exit the loop cleanly
+                e.printStackTrace()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                // Mandatory shutdown: Free up read memory
+                try { inputStream.close() } catch (e: Exception) { e.printStackTrace() }
             }
 
             val result = output.toString().trim()
