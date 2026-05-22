@@ -183,29 +183,28 @@ object AdbInstaller {
                 outputStream.flush()
             }
 
-            // Read the response
+            // Read the response with blocking reads. `inputStream.available()` is
+            // not reliable on ADB piped streams, so the previous polling approach
+            // often missed the response even when the install actually succeeded.
             val output = StringBuilder()
             val inputStream = stream.openInputStream()
-            val buffer = ByteArray(1024)
-            var bytesRead: Int
-            var totalWait = 0
-            val maxWait = 30000 // 30 seconds for install
+            val readBuffer = ByteArray(1024)
 
-            // Read with timeout
-            while (totalWait < maxWait) {
-                if (inputStream.available() > 0) {
-                    bytesRead = inputStream.read(buffer)
-                    if (bytesRead > 0) {
-                        output.append(String(buffer, 0, bytesRead))
-                    }
-                    if (bytesRead == -1) break
-                } else {
-                    kotlinx.coroutines.delay(100)
-                    totalWait += 100
-                    // Check if we got a complete response
-                    val currentOutput = output.toString()
-                    if (currentOutput.contains("Success") || currentOutput.contains("Failure")) {
-                        break
+            kotlinx.coroutines.withTimeoutOrNull(60_000L) {
+                kotlinx.coroutines.runInterruptible {
+                    while (true) {
+                        val n = try {
+                            inputStream.read(readBuffer)
+                        } catch (e: java.io.IOException) {
+                            -1
+                        }
+                        if (n <= 0) break
+                        output.append(String(readBuffer, 0, n))
+                        val current = output.toString()
+                        if (current.contains("Success", ignoreCase = true) ||
+                            current.contains("Failure", ignoreCase = true)) {
+                            break
+                        }
                     }
                 }
             }
