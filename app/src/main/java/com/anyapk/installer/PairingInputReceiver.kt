@@ -26,29 +26,19 @@ class PairingInputReceiver : BroadcastReceiver() {
             val input = remoteInput.getCharSequence(PairingInputService.KEY_PAIRING_INPUT)?.toString()
 
             if (input.isNullOrEmpty()) {
-                Toast.makeText(context, "Please enter code and port", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Please enter code", Toast.LENGTH_SHORT).show()
                 return
             }
 
-            // Parse input format: "CODE PORT" (space-separated)
-            val parts = input.trim().split("\\s+".toRegex())
-            if (parts.size != 2) {
-                Toast.makeText(
-                    context,
-                    "Invalid format. Use: CODE PORT (e.g., 123456 37829)",
-                    Toast.LENGTH_LONG
-                ).show()
-                return
-            }
+            val portInt = intent.getIntExtra("PORT_EXTRA", -1)
+            if (portInt == -1) return // Handle error
 
-            val code = parts[0]
-            val portInt = parts[1].toIntOrNull()
+            val code = input.trim()
 
             if (portInt == null || portInt <= 0) {
                 Toast.makeText(context, "Invalid port number", Toast.LENGTH_SHORT).show()
                 return
             }
-
             // Show progress notification
             showProgressNotification(context)
 

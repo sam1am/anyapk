@@ -7,6 +7,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -26,7 +28,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var refreshButton: Button
     private lateinit var testConnectionButton: Button
     private lateinit var selectApkButton: Button
-    private lateinit var checkUpdateButton: Button
 
     private val selectApkLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
@@ -48,7 +49,6 @@ class MainActivity : AppCompatActivity() {
         refreshButton = findViewById(R.id.refreshButton)
         testConnectionButton = findViewById(R.id.testConnectionButton)
         selectApkButton = findViewById(R.id.selectApkButton)
-        checkUpdateButton = findViewById(R.id.checkUpdateButton)
 
         refreshButton.setOnClickListener {
             checkStatus()
@@ -61,15 +61,43 @@ class MainActivity : AppCompatActivity() {
         selectApkButton.setOnClickListener {
             selectApkLauncher.launch("application/vnd.android.package-archive")
         }
+    }
 
-        checkUpdateButton.setOnClickListener {
-            checkForUpdates()
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
     override fun onResume() {
         super.onResume()
         checkStatus()
+
+        // Auto-check for updates if enabled
+        if (SettingsManager.isAutoUpdateEnabled(this)) {
+            checkForUpdatesInBackground()
+        }
+    }
+
+    private fun checkForUpdatesInBackground() {
+        lifecycleScope.launch {
+            // Small delay to not interfere with status check
+            kotlinx.coroutines.delay(1000)
+
+            val updateInfo = UpdateChecker.checkForUpdate(this@MainActivity)
+            if (updateInfo != null) {
+                showUpdateDialog(updateInfo)
+            }
+        }
     }
 
     private fun checkStatus() {
@@ -219,12 +247,6 @@ class MainActivity : AppCompatActivity() {
                 ).show()
             }
         }
-
-        Toast.makeText(
-            this,
-            "Go to Wireless Debugging, tap 'Pair device', then swipe down and enter the code in the notification",
-            Toast.LENGTH_LONG
-        ).show()
     }
 
     private fun requestNotificationPermission() {
@@ -289,28 +311,6 @@ class MainActivity : AppCompatActivity() {
                 testConnectionButton.isEnabled = true
                 testConnectionButton.text = "Test Connection"
             }
-        }
-    }
-
-    private fun checkForUpdates() {
-        checkUpdateButton.isEnabled = false
-        checkUpdateButton.text = "Checking..."
-
-        lifecycleScope.launch {
-            val updateInfo = UpdateChecker.checkForUpdate(this@MainActivity)
-
-            if (updateInfo != null) {
-                showUpdateDialog(updateInfo)
-            } else {
-                Toast.makeText(
-                    this@MainActivity,
-                    "You're running the latest version!",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-
-            checkUpdateButton.isEnabled = true
-            checkUpdateButton.text = "Check for Updates"
         }
     }
 
