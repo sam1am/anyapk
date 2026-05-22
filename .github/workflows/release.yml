@@ -17,39 +17,31 @@ jobs:
     outputs:
       version: ${{ steps.bump.outputs.version }}
       versionCode: ${{ steps.bump.outputs.versionCode }}
-      sha: ${{ steps.push.outputs.sha }}
+      sha: ${{ steps.bump.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Bump patch version
+      - name: Compute next version from latest tag
         id: bump
         run: |
           set -euo pipefail
-          current_version=$(grep -E '^\s*versionName\s*=' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
-          current_code=$(grep -E '^\s*versionCode\s*=' app/build.gradle.kts | sed -E 's/.*=\s*([0-9]+).*/\1/')
-          IFS='.' read -r major minor patch <<< "$current_version"
+          latest_tag=$(git tag --list 'v*.*.*' --sort=-version:refname | head -n1 || true)
+          if [ -z "$latest_tag" ]; then
+            base_version="0.0.0"
+          else
+            base_version="${latest_tag#v}"
+          fi
+          IFS='.' read -r major minor patch <<< "$base_version"
           new_version="${major}.${minor}.$((patch + 1))"
-          new_code=$((current_code + 1))
-          sed -i -E "s/(versionName\s*=\s*)\"[^\"]+\"/\1\"${new_version}\"/" app/build.gradle.kts
-          sed -i -E "s/(versionCode\s*=\s*)[0-9]+/\1${new_code}/" app/build.gradle.kts
+          new_code=$(git tag --list 'v*.*.*' | wc -l | tr -d ' ')
+          new_code=$((new_code + 1))
           echo "version=${new_version}" >> "$GITHUB_OUTPUT"
           echo "versionCode=${new_code}" >> "$GITHUB_OUTPUT"
-          echo "Bumped: ${current_version} (${current_code}) -> ${new_version} (${new_code})"
-
-      - name: Commit and push bump
-        id: push
-        run: |
-          set -euo pipefail
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/build.gradle.kts
-          git commit -m "chore: release v${{ steps.bump.outputs.version }} [skip ci]"
-          git push origin main
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "Releasing: ${base_version} -> ${new_version} (code ${new_code})"
 
   build:
     needs: bump-version
