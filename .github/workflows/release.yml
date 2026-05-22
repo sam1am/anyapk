@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      versionCode: ${{ steps.bump.outputs.versionCode }}
+      sha: ${{ steps.push.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump patch version
+        id: bump
+        run: |
+          set -euo pipefail
+          current_version=$(grep -E '^\s*versionName\s*=' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
+          current_code=$(grep -E '^\s*versionCode\s*=' app/build.gradle.kts | sed -E 's/.*=\s*([0-9]+).*/\1/')
+          IFS='.' read -r major minor patch <<< "$current_version"
+          new_version="${major}.${minor}.$((patch + 1))"
+          new_code=$((current_code + 1))
+          sed -i -E "s/(versionName\s*=\s*)\"[^\"]+\"/\1\"${new_version}\"/" app/build.gradle.kts
+          sed -i -E "s/(versionCode\s*=\s*)[0-9]+/\1${new_code}/" app/build.gradle.kts
+          echo "version=${new_version}" >> "$GITHUB_OUTPUT"
+          echo "versionCode=${new_code}" >> "$GITHUB_OUTPUT"
+          echo "Bumped: ${current_version} (${current_code}) -> ${new_version} (${new_code})"
+
+      - name: Commit and push bump
+        id: push
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/build.gradle.kts
+          git commit -m "chore: release v${{ steps.bump.outputs.version }} [skip ci]"
+          git push origin main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: bump-version
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - branch: main
+            suffix: ""
+          - branch: dev
+            suffix: "-dev"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          fetch-depth: 1
+
+      - name: Align version for build
+        run: |
+          set -euo pipefail
+          version="${{ needs.bump-version.outputs.version }}${{ matrix.suffix }}"
+          code="${{ needs.bump-version.outputs.versionCode }}"
+          sed -i -E "s/(versionName\s*=\s*)\"[^\"]+\"/\1\"${version}\"/" app/build.gradle.kts
+          sed -i -E "s/(versionCode\s*=\s*)[0-9]+/\1${code}/" app/build.gradle.kts
+          grep -E 'versionName|versionCode' app/build.gradle.kts
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v3
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Stage APK with release name
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          src=$(find app/build/outputs/apk/debug -name '*.apk' | head -n1)
+          if [ "${{ matrix.branch }}" = "main" ]; then
+            dest="release/anyapk-${{ needs.bump-version.outputs.version }}.apk"
+          else
+            dest="release/anyapk-dev-${{ needs.bump-version.outputs.version }}.apk"
+          fi
+          cp "$src" "$dest"
+          ls -la release/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ matrix.branch }}
+          path: release/*.apk
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    needs: [bump-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download main APK
+        uses: actions/download-artifact@v4
+        with:
+          name: apk-main
+          path: release
+
+      - name: Download dev APK
+        uses: actions/download-artifact@v4
+        with:
+          name: apk-dev
+          path: release
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.bump-version.outputs.version }}
+          name: v${{ needs.bump-version.outputs.version }}
+          target_commitish: ${{ needs.bump-version.outputs.sha }}
+          generate_release_notes: true
+          files: |
+            release/anyapk-${{ needs.bump-version.outputs.version }}.apk
+            release/anyapk-dev-${{ needs.bump-version.outputs.version }}.apk
