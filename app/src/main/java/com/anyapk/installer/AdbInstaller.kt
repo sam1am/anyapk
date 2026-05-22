@@ -169,8 +169,17 @@ object AdbInstaller {
             val apkFile = java.io.File(apkPath)
             val apkSize = apkFile.length()
 
+            // On Android 14+ (API 34) the package manager rejects APKs whose
+            // targetSdk is below 23 unless this flag is set. Older Android
+            // versions don't recognize the flag, so only add it when needed.
+            val bypassFlag = if (android.os.Build.VERSION.SDK_INT >= 34) {
+                "--bypass-low-target-sdk-block "
+            } else {
+                ""
+            }
+
             // Open install stream with size
-            stream = manager.openStream("exec:cmd package install -S $apkSize")
+            stream = manager.openStream("exec:cmd package install $bypassFlag-S $apkSize")
 
             // Stream the APK data
             val outputStream = stream.openOutputStream()
