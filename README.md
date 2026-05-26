@@ -30,7 +30,7 @@ If you believe software should serve users rather than control them, anyapk is f
 
 ## Features
 
-- **One-time setup**: Pair once using wireless debugging, use forever
+- **One-time pairing**: Pair once using wireless debugging — no need to re-pair after reboots (you'll just need to re-enable wireless debugging itself, since Android turns it off on reboot)
 - **No root required**: Uses Android's built-in wireless ADB
 - **No external dependencies**: Everything runs locally on your device
 - **System-wide integration**: Register as an APK handler to install from any file manager
@@ -102,7 +102,9 @@ If you can't install the APK directly (due to existing restrictions), use ADB fr
    - Check **"Always allow from this computer"**
    - Tap **Allow**
 
-That's it! anyapk is now permanently connected and ready to use.
+That's it! anyapk is paired and ready to use.
+
+> **Note on persistence:** Android turns **Wireless debugging** off automatically when the device reboots. After a reboot, just flip it back on in Developer Options — you won't need to re-pair, since anyapk stays in the **Paired devices** list. If anyapk goes unused for a long stretch, Android may also drop it from that list; if that happens, repeat the pairing steps above.
 
 ### Installing APK Files
 
@@ -154,7 +156,7 @@ Your activity is your business, not ours.
 ## Troubleshooting
 
 **"Setup Required" stays visible even after enabling wireless debugging:**
-- Make sure wireless debugging is actually ON in Developer Options
+- Make sure wireless debugging is actually ON in Developer Options (it gets turned off automatically on every reboot)
 - Try restarting anyapk
 - Verify you're on WiFi (wireless debugging requires WiFi)
 
