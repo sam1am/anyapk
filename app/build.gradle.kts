@@ -55,6 +55,13 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+
+    dependenciesInfo {
+        // Google-encrypted dependency blob; only Google can read it. Strip
+        // it so IzzyOnDroid/F-Droid scanners don't flag an opaque signing block.
+        includeInApk = false
+        includeInBundle = false
+    }
 }
 
 dependencies {
