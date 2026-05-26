@@ -178,8 +178,9 @@ object AdbInstaller {
                 ""
             }
 
-            // Open install stream with size
-            stream = manager.openStream("exec:cmd package install $bypassFlag-S $apkSize")
+            // Open install stream with size. `-d` allows downgrading to an older
+            // versionCode; for fresh installs and upgrades it's a no-op.
+            stream = manager.openStream("exec:cmd package install -d $bypassFlag-S $apkSize")
 
             // Stream the APK data
             val outputStream = stream.openOutputStream()
