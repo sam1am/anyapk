@@ -121,7 +121,7 @@ Since anyapk itself will need developer verification to be widely distributed, c
 
 ## Technical Details
 
-- **Minimum Android Version**: Android 6.0 (API 23)
+- **Minimum Android Version**: Android 11 (API 30) - Required for wireless debugging
 - **Wireless Debugging Required**: Android 11+ (API 30+)
 - **Package Name**: com.anyapk.installer
 - **Permissions**:
