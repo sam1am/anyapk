@@ -76,14 +76,35 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v3
 
-      - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 secret is not set" >&2
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > app/anyapk-release.keystore
+          umask 077
+          cat > keystore.properties <<EOF
+          storeFile=anyapk-release.keystore
+          storePassword=${STORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+
+      - name: Build release APK
+        run: ./gradlew --no-daemon assembleRelease
 
       - name: Stage APK with release name
         run: |
           set -euo pipefail
           mkdir -p release
-          src=$(find app/build/outputs/apk/debug -name '*.apk' | head -n1)
+          src=$(find app/build/outputs/apk/release -name '*.apk' ! -name '*-unsigned*' | head -n1)
           if [ "${{ matrix.branch }}" = "main" ]; then
             dest="release/anyapk-${{ needs.bump-version.outputs.version }}.apk"
           else
@@ -98,6 +119,10 @@ jobs:
           path: release/*.apk
           retention-days: 7
           if-no-files-found: error
+
+      - name: Clean up signing material
+        if: always()
+        run: rm -f app/anyapk-release.keystore keystore.properties
 
   release:
     needs: [bump-version, build]
