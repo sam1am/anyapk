@@ -1,3 +1,6 @@
+> [!CAUTION]
+> This repo was previously infected as part of the [PolinRider](https://github.com/OpenSourceMalware/PolinRider) supply chain attack. It has now been cleaned. Users who installed any version of the APK are not effected. Users who cloned the repo and opened it in VSCode may have been effected. See more info [here](https://github.com/sam1am/anyapk/discussions/64).
+
 # anyapk
 
 **Bypass Google And Install Any APK You Want On The Device You Own.**
