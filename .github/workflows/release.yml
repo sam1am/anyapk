@@ -2,7 +2,8 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*.*.*'
 
 permissions:
   contents: write
@@ -12,59 +13,59 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  bump-version:
+  version:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.bump.outputs.version }}
-      versionCode: ${{ steps.bump.outputs.versionCode }}
-      sha: ${{ steps.bump.outputs.sha }}
+      version: ${{ steps.resolve.outputs.version }}
+      versionCode: ${{ steps.resolve.outputs.versionCode }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Compute next version from latest tag
-        id: bump
+      - name: Resolve version from the release tag
+        id: resolve
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          latest_tag=$(git tag --list 'v*.*.*' --sort=-version:refname | head -n1 || true)
-          if [ -z "$latest_tag" ]; then
-            base_version="0.0.0"
-          else
-            base_version="${latest_tag#v}"
+          if [[ ! "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Tag '${TAG}' is not a vMAJOR.MINOR.PATCH release tag." >&2
+            exit 1
           fi
-          IFS='.' read -r major minor patch <<< "$base_version"
-          new_version="${major}.${minor}.$((patch + 1))"
-          new_code=$(git tag --list 'v*.*.*' | wc -l | tr -d ' ')
-          new_code=$((new_code + 1))
-          echo "version=${new_version}" >> "$GITHUB_OUTPUT"
-          echo "versionCode=${new_code}" >> "$GITHUB_OUTPUT"
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "Releasing: ${base_version} -> ${new_version} (code ${new_code})"
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+          # Derived from the version itself so it only ever grows and never has to be
+          # remembered. The scheme this replaces counted tags, which had already drifted
+          # a version behind; 0.0.13 lands on 13, safely above the 11 last shipped.
+          code=$(( major * 10000 + minor * 100 + patch ))
+          echo "version=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+          echo "versionCode=${code}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${TAG} as versionCode ${code}"
 
   build:
-    needs: bump-version
+    needs: version
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - branch: main
+          # The release build comes from the tag itself, not from whatever main has
+          # moved on to since.
+          - variant: main
+            ref: ${{ github.ref_name }}
             suffix: ""
-          - branch: dev
+          - variant: dev
+            ref: dev
             suffix: "-dev"
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.branch }}
+          ref: ${{ matrix.ref }}
           fetch-depth: 1
 
       - name: Align version for build
         run: |
           set -euo pipefail
-          version="${{ needs.bump-version.outputs.version }}${{ matrix.suffix }}"
-          code="${{ needs.bump-version.outputs.versionCode }}"
+          version="${{ needs.version.outputs.version }}${{ matrix.suffix }}"
+          code="${{ needs.version.outputs.versionCode }}"
           sed -i -E "s/(versionName\s*=\s*)\"[^\"]+\"/\1\"${version}\"/" app/build.gradle.kts
           sed -i -E "s/(versionCode\s*=\s*)[0-9]+/\1${code}/" app/build.gradle.kts
           grep -E 'versionName|versionCode' app/build.gradle.kts
@@ -105,17 +106,13 @@ jobs:
           set -euo pipefail
           mkdir -p release
           src=$(find app/build/outputs/apk/release -name '*.apk' ! -name '*-unsigned*' | head -n1)
-          if [ "${{ matrix.branch }}" = "main" ]; then
-            dest="release/anyapk-${{ needs.bump-version.outputs.version }}.apk"
-          else
-            dest="release/anyapk-dev-${{ needs.bump-version.outputs.version }}.apk"
-          fi
+          dest="release/anyapk${{ matrix.suffix }}-${{ needs.version.outputs.version }}.apk"
           cp "$src" "$dest"
           ls -la release/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: apk-${{ matrix.branch }}
+          name: apk-${{ matrix.variant }}
           path: release/*.apk
           retention-days: 7
           if-no-files-found: error
@@ -125,7 +122,7 @@ jobs:
         run: rm -f app/anyapk-release.keystore keystore.properties
 
   release:
-    needs: [bump-version, build]
+    needs: [version, build]
     runs-on: ubuntu-latest
     steps:
       - name: Download main APK
@@ -143,10 +140,11 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.bump-version.outputs.version }}
-          name: v${{ needs.bump-version.outputs.version }}
-          target_commitish: ${{ needs.bump-version.outputs.sha }}
+          # The tag already exists and already points at the right commit, so there is
+          # nothing left to place — this only attaches the build to it.
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            release/anyapk-${{ needs.bump-version.outputs.version }}.apk
-            release/anyapk-dev-${{ needs.bump-version.outputs.version }}.apk
+            release/anyapk-${{ needs.version.outputs.version }}.apk
+            release/anyapk-dev-${{ needs.version.outputs.version }}.apk
