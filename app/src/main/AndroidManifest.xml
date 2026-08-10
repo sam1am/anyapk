@@ -54,6 +54,63 @@
                 <data android:scheme="content" />
                 <data android:scheme="file" />
             </intent-filter>
+
+            <!--
+                Split bundles and expansion files. File managers hand these over as
+                generic archives, so the file name has to do the work the MIME type
+                can't.
+
+                The repeated patterns are not a mistake: PatternMatcher's simple glob
+                matches ".*" against the first occurrence of what follows and never
+                backtracks, so ".*\\.xapk" alone misses any name containing an earlier
+                dot — which is most of them, since bundles are usually named after the
+                package. One pattern per dot in the path is the only way to cover them.
+            -->
+            <intent-filter android:priority="100">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/vnd.android.package-archive" />
+
+                <data android:pathPattern=".*\\.apks" />
+                <data android:pathPattern=".*\\..*\\.apks" />
+                <data android:pathPattern=".*\\..*\\..*\\.apks" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.apks" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.apks" />
+
+                <data android:pathPattern=".*\\.apkm" />
+                <data android:pathPattern=".*\\..*\\.apkm" />
+                <data android:pathPattern=".*\\..*\\..*\\.apkm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.apkm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.apkm" />
+
+                <data android:pathPattern=".*\\.xapk" />
+                <data android:pathPattern=".*\\..*\\.xapk" />
+                <data android:pathPattern=".*\\..*\\..*\\.xapk" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.xapk" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.xapk" />
+
+                <data android:pathPattern=".*\\.obb" />
+                <data android:pathPattern=".*\\..*\\.obb" />
+                <data android:pathPattern=".*\\..*\\..*\\.obb" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.obb" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.obb" />
+
+                <!-- .aab can't be installed on a device; anyapk catches it to say so. -->
+                <data android:pathPattern=".*\\.aab" />
+                <data android:pathPattern=".*\\..*\\.aab" />
+                <data android:pathPattern=".*\\..*\\..*\\.aab" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.aab" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.aab" />
+            </intent-filter>
         </activity>
 
         <!-- Settings Activity -->

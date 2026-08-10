@@ -4,12 +4,17 @@
     <string name="status_checking">Checking ADB connection status…</string>
     <string name="btn_connected">Connected</string>
     <string name="btn_waiting">Waiting…</string>
-    <string name="btn_install">Install APK</string>
-    <string name="btn_select_apk">Select APK to Install</string>
+    <string name="btn_install">Install</string>
+    <string name="btn_select_apk">Select a File to Install</string>
     <string name="btn_refresh">Refresh</string>
     <string name="install_ready">Ready to install:\n%s</string>
+    <string name="reading_package">Reading package…</string>
     <string name="installing">Installing…</string>
+    <string name="installing_parts">Installing %1$d of %2$d parts…</string>
+    <string name="copying_expansion">Copying %s…</string>
     <string name="install_success">✅ Installed successfully!</string>
+    <string name="expansion_success">✅ Expansion file copied for %s</string>
     <string name="install_failed">❌ Install failed: %s</string>
-    <string name="error_no_apk">No APK provided</string>
+    <string name="unsupported_title">Can\'t install this file</string>
+    <string name="error_no_apk">No file provided</string>
 </resources>
