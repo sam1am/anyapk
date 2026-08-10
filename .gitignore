@@ -34,3 +34,6 @@ google-services.json
 # Android Profiling
 *.hprof
 branch_structure.json
+
+# macOS
+.DS_Store

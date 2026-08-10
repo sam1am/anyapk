@@ -22,7 +22,6 @@ object UpdateChecker {
 
     data class UpdateInfo(
         val versionName: String,
-        val versionCode: Int,
         val downloadUrl: String,
         val releaseNotes: String,
         val publishedAt: String
@@ -34,10 +33,9 @@ object UpdateChecker {
      */
     suspend fun checkForUpdate(context: Context): UpdateInfo? = withContext(Dispatchers.IO) {
         try {
-            val currentVersionCode = getCurrentVersionCode(context)
             val currentVersionName = getCurrentVersionName(context)
 
-            Log.d(TAG, "Checking for updates. Current version: $currentVersionName ($currentVersionCode)")
+            Log.d(TAG, "Checking for updates. Current version: $currentVersionName")
 
             val url = URL(GITHUB_API_URL)
             val connection = url.openConnection() as HttpURLConnection
@@ -60,14 +58,9 @@ object UpdateChecker {
             }
 
             val json = JSONObject(response)
-            val tagName = json.getString("tag_name").removePrefix("v")
-            val latestVersionName = tagName
+            val latestVersionName = json.getString("tag_name").removePrefix("v")
 
-            // Extract version code from tag name or release body
-            // Assuming tag format: v0.0.5 or similar
-            val latestVersionCode = extractVersionCode(latestVersionName)
-
-            Log.d(TAG, "Latest version on GitHub: $latestVersionName ($latestVersionCode)")
+            Log.d(TAG, "Latest version on GitHub: $latestVersionName")
 
             // Find the APK download URL from assets
             val assets = json.getJSONArray("assets")
@@ -87,8 +80,10 @@ object UpdateChecker {
                 return@withContext null
             }
 
-            // Check if update is available
-            if (latestVersionCode > currentVersionCode) {
+            // Compare the version *names*. The installed versionCode cannot be used here:
+            // release builds derive it from the tag count, which drifts from the 0.0.N
+            // version name, so a matching version would still look out of date.
+            if (compareVersions(latestVersionName, currentVersionName) > 0) {
                 val releaseNotes = json.optString("body", "No release notes available")
                 val publishedAt = json.optString("published_at", "")
 
@@ -96,7 +91,6 @@ object UpdateChecker {
 
                 return@withContext UpdateInfo(
                     versionName = latestVersionName,
-                    versionCode = latestVersionCode,
                     downloadUrl = apkUrl,
                     releaseNotes = releaseNotes,
                     publishedAt = publishedAt
@@ -112,44 +106,34 @@ object UpdateChecker {
         }
     }
 
-    private fun getCurrentVersionCode(context: Context): Int {
-        return context.packageManager.getPackageInfo(context.packageName, 0).versionCode
-    }
-
     private fun getCurrentVersionName(context: Context): String {
-        return context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        return context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0"
     }
 
     /**
-     * Extract version code from version name
-     * Example: "0.0.5" -> 5, "1.2.3" -> 10203
+     * Compares two dotted version names numerically, segment by segment.
+     * Any pre-release suffix ("0.0.10-dev") is ignored, so a dev build of a
+     * version is treated as equal to the release of the same version.
+     *
+     * @return a positive number if [a] is newer than [b], 0 if equal, negative if older
      */
-    private fun extractVersionCode(versionName: String): Int {
-        return try {
-            val parts = versionName.split(".")
-            when (parts.size) {
-                // Simple format: 0.0.5 -> use last number
-                3 -> {
-                    val major = parts[0].toIntOrNull() ?: 0
-                    val minor = parts[1].toIntOrNull() ?: 0
-                    val patch = parts[2].toIntOrNull() ?: 0
+    internal fun compareVersions(a: String, b: String): Int {
+        val partsA = versionParts(a)
+        val partsB = versionParts(b)
 
-                    // If using simple incrementing (like current: v5 = 0.0.5)
-                    if (major == 0 && minor == 0) {
-                        patch
-                    } else {
-                        // Semantic versioning: 1.2.3 -> 10203
-                        major * 10000 + minor * 100 + patch
-                    }
-                }
-                else -> {
-                    // Fallback: try to extract any number
-                    versionName.filter { it.isDigit() }.toIntOrNull() ?: 0
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing version code from $versionName", e)
-            0
+        for (i in 0 until maxOf(partsA.size, partsB.size)) {
+            val diff = (partsA.getOrNull(i) ?: 0) - (partsB.getOrNull(i) ?: 0)
+            if (diff != 0) return diff
         }
+        return 0
+    }
+
+    private fun versionParts(versionName: String): List<Int> {
+        return versionName
+            .substringBefore('-')
+            .substringBefore('+')
+            .trim()
+            .split('.')
+            .map { it.filter(Char::isDigit).toIntOrNull() ?: 0 }
     }
 }

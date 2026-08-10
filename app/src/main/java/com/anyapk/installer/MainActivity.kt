@@ -78,17 +78,35 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        checkStatus()
-
-        // Auto-check for updates if enabled
-        if (SettingsManager.isAutoUpdateEnabled(this)) {
-            checkForUpdatesInBackground()
-        }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Keep the newest intent so onResume can see EXTRA_FROM_PAIRING.
+        setIntent(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+
+        // Coming straight back from a successful pairing: skip the cached connection
+        // status, which is still pre-pairing and would show the checklist again.
+        val fromPairing = intent?.getBooleanExtra(EXTRA_FROM_PAIRING, false) == true
+        if (fromPairing) {
+            intent.removeExtra(EXTRA_FROM_PAIRING)
+        }
+
+        checkStatus(forceCheck = fromPairing)
+    }
+
+    /**
+     * Checks for updates once per app session, and only once ADB is connected —
+     * installing an update goes through ADB, so offering it earlier would just fail.
+     */
     private fun checkForUpdatesInBackground() {
+        if (updatePromptShown) return
+        if (!SettingsManager.isAutoUpdateEnabled(this)) return
+
+        updatePromptShown = true
+
         lifecycleScope.launch {
             // Small delay to not interfere with status check
             kotlinx.coroutines.delay(1000)
@@ -96,14 +114,17 @@ class MainActivity : AppCompatActivity() {
             val updateInfo = UpdateChecker.checkForUpdate(this@MainActivity)
             if (updateInfo != null) {
                 showUpdateDialog(updateInfo)
+            } else {
+                // Nothing to offer — allow a later resume to check again.
+                updatePromptShown = false
             }
         }
     }
 
-    private fun checkStatus() {
+    private fun checkStatus(forceCheck: Boolean = false) {
         lifecycleScope.launch {
             val status = withContext(Dispatchers.IO) {
-                AdbInstaller.getConnectionStatus(this@MainActivity)
+                AdbInstaller.getConnectionStatus(this@MainActivity, forceCheck)
             }
 
             val isDeveloperModeEnabled = isDeveloperOptionsEnabled()
@@ -112,11 +133,32 @@ class MainActivity : AppCompatActivity() {
             when (status) {
                 AdbInstaller.ConnectionStatus.CONNECTED -> {
                     showConnectedState()
+                    // A working connection is the only chance to pick up the permission
+                    // that lets anyapk re-enable wireless debugging on its own later.
+                    SettingsManager.setHasPairedBefore(this@MainActivity)
+                    acquireWirelessDebuggingPermission()
+                    checkForUpdatesInBackground()
                 }
                 else -> {
                     showSetupChecklist(isDeveloperModeEnabled, hasNotificationPermission)
                 }
             }
+        }
+    }
+
+    /**
+     * Grants anyapk WRITE_SECURE_SETTINGS through the live ADB connection, once per
+     * session. Failure is not worth reporting: it only costs the convenience of
+     * auto-enabling wireless debugging later, and the user can still do it by hand.
+     */
+    private fun acquireWirelessDebuggingPermission() {
+        if (permissionGrantAttempted) return
+        if (WirelessDebugging.canToggle(this)) return
+
+        permissionGrantAttempted = true
+
+        lifecycleScope.launch {
+            WirelessDebugging.tryAcquireTogglePermission(this@MainActivity)
         }
     }
 
@@ -384,5 +426,15 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_NOTIFICATION_PERMISSION = 1002
+
+        /** Set by [PairingInputReceiver] when it brings the app forward after pairing. */
+        const val EXTRA_FROM_PAIRING = "com.anyapk.installer.FROM_PAIRING"
+
+        // Process-wide so the prompt survives activity recreation and is shown
+        // at most once per app session.
+        private var updatePromptShown = false
+
+        // Likewise, only try the self-grant once per session.
+        private var permissionGrantAttempted = false
     }
 }

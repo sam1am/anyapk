@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>anyapk — install any APK on the device you own</title>
+<meta name="description" content="anyapk installs any APK on your Android device using a local ADB connection. No root, no computer, no gatekeepers.">
+<link rel="icon" href="images/icon.png">
+<meta property="og:title" content="anyapk">
+<meta property="og:description" content="Bypass Google and install any APK you want on the device you own.">
+<meta property="og:image" content="images/icon.png">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f5f4f8;
+    --fg: #1a1a1f;
+    --fg-muted: #55535e;
+    --accent: #5b16d6;
+    --accent-fg: #ffffff;
+    --border: #e0dee7;
+    --shadow: 0 1px 3px rgba(20, 10, 40, .08), 0 8px 24px rgba(20, 10, 40, .06);
+    --radius: 12px;
+    --maxw: 46rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131218;
+      --bg-alt: #1c1b23;
+      --fg: #ececf1;
+      --fg-muted: #a5a2b3;
+      --accent: #a688ff;
+      --accent-fg: #17121f;
+      --border: #2e2c38;
+      --shadow: 0 1px 3px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
+
+  header {
+    text-align: center;
+    padding: 4rem 1.25rem 3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  header img.icon {
+    width: 96px; height: 96px;
+    border-radius: 22%;
+    box-shadow: var(--shadow);
+  }
+  h1 {
+    font-size: 2.75rem;
+    margin: 1.25rem 0 .5rem;
+    letter-spacing: -.03em;
+  }
+  .tagline {
+    font-size: 1.15rem;
+    color: var(--fg-muted);
+    margin: 0 auto 2rem;
+    max-width: 32rem;
+  }
+
+  .btn {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--accent-fg);
+    text-decoration: none;
+    font-weight: 600;
+    padding: .8rem 1.6rem;
+    border-radius: var(--radius);
+    transition: transform .12s ease, opacity .12s ease;
+  }
+  .btn:hover { transform: translateY(-1px); opacity: .92; }
+  .btn.secondary {
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--border);
+  }
+  .btns { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
+
+  main { padding: 3rem 0 1rem; }
+  section { margin-bottom: 3.5rem; }
+  h2 {
+    font-size: 1.5rem;
+    letter-spacing: -.02em;
+    margin: 0 0 1rem;
+    padding-bottom: .5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 1.1rem; margin: 2rem 0 .5rem; }
+  p { margin: 0 0 1rem; }
+  a { color: var(--accent); }
+
+  blockquote {
+    margin: 0 0 1.25rem;
+    padding: .25rem 0 .25rem 1.25rem;
+    border-left: 3px solid var(--accent);
+    font-size: 1.1rem;
+  }
+
+  ul.plain { padding-left: 1.25rem; }
+  ul.plain li { margin-bottom: .4rem; }
+
+  ol.steps { padding-left: 0; list-style: none; counter-reset: step; }
+  ol.steps > li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 1.75rem 2.75rem;
+    margin: 0;
+  }
+  ol.steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: .1rem;
+    width: 1.9rem; height: 1.9rem;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-size: .9rem;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+  }
+  ol.steps h3 { margin: 0 0 .35rem; font-size: 1.05rem; }
+
+  ol.substeps {
+    padding-left: 1.4rem;
+    margin: 1rem 0 0;
+  }
+  ol.substeps > li {
+    margin-bottom: 1.5rem;
+    padding-left: .35rem;
+  }
+  ol.substeps > li::marker {
+    color: var(--fg-muted);
+    font-weight: 700;
+  }
+  ol.substeps > li > p:last-child { margin-bottom: 0; }
+
+  figure {
+    margin: 1rem 0 0;
+    max-width: 300px;
+  }
+  /* Landscape captures need the room that phone screenshots don't. */
+  figure.wide { max-width: 100%; }
+  figure.hero-shot {
+    max-width: 34rem;
+    margin: 3rem auto 0;
+  }
+  figure.hero-shot figcaption { text-align: center; }
+  figure img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  figcaption {
+    font-size: .85rem;
+    color: var(--fg-muted);
+    margin-top: .5rem;
+  }
+
+  .callout {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .callout strong { display: block; margin-bottom: .25rem; }
+
+  code {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: .1rem .35rem;
+    font-size: .9em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem 1.25rem 3rem;
+    text-align: center;
+    color: var(--fg-muted);
+    font-size: .9rem;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <img class="icon" src="images/icon.png" alt="anyapk app icon">
+  <h1>anyapk</h1>
+  <p class="tagline">Bypass Google and install any APK you want on the device you own.</p>
+  <div class="btns">
+    <a class="btn" href="https://github.com/sam1am/anyapk/releases">Download the latest release</a>
+    <a class="btn secondary" href="https://github.com/sam1am/anyapk">View on GitHub</a>
+  </div>
+
+  <figure class="hero-shot">
+    <img src="images/screenshots/open_with.jpg" alt="Android's Open with chooser showing anyapk (Install APK) selected alongside Package installer and Termux">
+    <figcaption>Open any APK, pick anyapk instead of the Package installer, and it installs.</figcaption>
+  </figure>
+</header>
+
+<main class="wrap">
+
+  <section id="manifesto">
+    <h2>Application freedom is user freedom</h2>
+    <blockquote>Android devices belong to their users, not corporations or governments.</blockquote>
+    <p>
+      Yet with each passing year, installing software on your own device becomes more restricted,
+      more cumbersome, and more dependent on the approval of gatekeepers who do not have your best
+      interests in mind.
+    </p>
+    <p>
+      When a corporation becomes a gatekeeper, it does not stand at the gate alone. Its partners
+      become gatekeepers. Government jurisdictions become gatekeepers. What begins as a "quality
+      control measure" becomes a lever of control — one that has been used to deny people free
+      communication tools, to block software that challenges power, and to enforce restrictions that
+      serve business interests rather than users.
+    </p>
+    <p>Every verification requirement is a chokepoint where control can be exercised. We built anyapk because:</p>
+    <ul class="plain">
+      <li>Your device belongs to you</li>
+      <li>You have the right to run any software you choose</li>
+      <li>No corporation or government should stand between you and that choice</li>
+      <li>Technical barriers to freedom must be removed, not accepted</li>
+    </ul>
+    <p>
+      anyapk uses Android's own wireless debugging to install APKs locally — the same mechanism
+      developers use, running entirely on your device. No root. No computer. No cloud. No approval.
+    </p>
+  </section>
+
+  <section id="install">
+    <h2>Install anyapk</h2>
+    <p>
+      Download the latest <code>anyapk.apk</code> from the
+      <a href="https://github.com/sam1am/anyapk/releases">releases page</a>, open it on your device,
+      and grant installation permission if prompted.
+    </p>
+    <p>
+      If your device refuses to install it, use ADB from a computer once —
+      <code>adb install anyapk.apk</code> — and that's the last time you'll need a computer for this.
+    </p>
+  </section>
+
+  <section id="setup">
+    <h2>Set up in three steps</h2>
+    <p>
+      One-time pairing with your device's wireless debugging. You never type a port and you never
+      leave the Settings screen mid-pairing — the code goes into a notification.
+    </p>
+
+    <ol class="steps">
+      <li>
+        <h3>Enable Developer Options</h3>
+        <p>
+          Open <strong>Settings → About Phone</strong> and tap <strong>Build Number</strong> seven
+          times, until your device says you're a developer. Skip this if it's already on.
+        </p>
+      </li>
+
+      <li>
+        <h3>Grant notification permission</h3>
+        <p>
+          Open anyapk and tap <strong>Grant Notification Permission</strong>. The pairing code is
+          entered by replying to a notification, so this one is required, not optional.
+        </p>
+        <figure>
+          <img src="images/screenshots/main_screen_no_permissions_granted.jpg" alt="anyapk setup checklist showing three steps: enable Developer Options, grant notification permission, and pair with wireless ADB">
+          <figcaption>The setup checklist tracks your progress.</figcaption>
+        </figure>
+      </li>
+
+      <li>
+        <h3>Pair with wireless ADB</h3>
+        <p>The only fiddly part, and it's over in a minute.</p>
+
+        <ol class="substeps">
+          <li>
+            <p>
+              Tap <strong>Start Pairing</strong>. anyapk posts its pairing notification and opens
+              Developer Options for you.
+            </p>
+            <figure>
+              <img src="images/screenshots/tap-pair-device-alert-highlighted.jpg" alt="Developer Options screen with the anyapk notification appearing at the top saying Tap Pair device">
+              <figcaption>anyapk's notification rides along while you're in Settings.</figcaption>
+            </figure>
+          </li>
+
+          <li>
+            <p>
+              Scroll to the <strong>Debugging</strong> section, flip <strong>Wireless debugging</strong>
+              on, then tap the row itself to open its screen.
+            </p>
+            <figure>
+              <img src="images/screenshots/dev_options_wireless_debugging_toggle.jpg" alt="Developer Options Debugging section with the Wireless debugging toggle highlighted">
+              <figcaption>Toggle it on, then tap the label to go in.</figcaption>
+            </figure>
+          </li>
+
+          <li>
+            <p>Tap <strong>Pair device with pairing code</strong> — not the QR code option.</p>
+            <figure>
+              <img src="images/screenshots/wireless_debugging_menu.jpg" alt="Wireless debugging screen with Pair device with pairing code highlighted">
+              <figcaption>Choose the six-digit code method.</figcaption>
+            </figure>
+          </li>
+
+          <li>
+            <p>A dialog shows your six-digit pairing code. Do not dismiss it and do not leave Settings.</p>
+            <figure>
+              <img src="images/screenshots/pairing_code_displayed.jpg" alt="Pair with device dialog showing a six-digit Wi-Fi pairing code">
+              <figcaption>Your code — good for this dialog only.</figcaption>
+            </figure>
+            <div class="callout">
+              <strong>This is the part people get wrong</strong>
+              The pairing dialog has to stay open and visible <em>behind</em> the notification shade.
+              Android only advertises the pairing service while that dialog is on screen, so if you close
+              it or switch to anyapk to type the code, pairing will fail.
+            </div>
+          </li>
+
+          <li>
+            <p>
+              Swipe the notification shade down over the dialog, find the anyapk notification, tap
+              <strong>Reply</strong>, type the six digits and send. anyapk pairs and brings itself back
+              to the foreground.
+            </p>
+            <figure>
+              <img src="images/screenshots/entering_pairing_code_in_notification.jpg" alt="Notification shade pulled down with the pairing code typed into anyapk's notification reply field">
+              <figcaption>Reply to the notification without leaving Settings.</figcaption>
+            </figure>
+          </li>
+
+          <li>
+            <p>
+              Approve the <strong>"Allow USB debugging?"</strong> prompt with <em>Always allow</em>.
+              If it never appears, tap <strong>Test Connection</strong> in anyapk to trigger it.
+            </p>
+          </li>
+        </ol>
+      </li>
+    </ol>
+  </section>
+
+  <section id="usage">
+    <h2>Installing APKs</h2>
+    <p>
+      Once paired, open any APK from a file manager, browser, or your downloads — and pick
+      <strong>anyapk</strong> instead of the system Package installer. That chooser is where the
+      gatekeeping ends.
+    </p>
+    <figure class="wide">
+      <img src="images/screenshots/open_with.jpg" alt="Android's Open with chooser showing anyapk (Install APK) selected alongside Package installer and Termux">
+      <figcaption>Pick <strong>anyapk</strong>, then <strong>Always</strong> to make it your default APK handler.</figcaption>
+    </figure>
+    <p>
+      Choose <strong>Just once</strong> to try it, or <strong>Always</strong> to hand every APK to
+      anyapk from then on. You can also skip the chooser entirely: open anyapk and tap
+      <strong>Select APK to Install</strong>.
+    </p>
+    <p>Pairing is one-time and survives reboots, as long as wireless debugging stays enabled.</p>
+    <div class="callout">
+      <strong>Only install APKs you trust</strong>
+      anyapk deliberately bypasses Google's verification, which makes checking the source your responsibility.
+      With great power comes great responsibility. Install only APKs from sources you trust. 
+    </div>
+  </section>
+
+  <section id="privacy">
+    <h2>Privacy</h2>
+    <p>
+      anyapk collects nothing, tracks nothing, and transmits nothing about you or what you install.
+      The only request that leaves your local network is the optional update check, which asks the
+      GitHub releases API for the latest version number — and you can turn it off in Settings.
+    </p>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  <p>
+    <a href="https://github.com/sam1am/anyapk">Source</a> ·
+    <a href="https://github.com/sam1am/anyapk/releases">Releases</a> ·
+    Apache 2.0
+  </p>
+  <p>Your device. Your choice. Your freedom.</p>
+</footer>
+
+</body>
+</html>
