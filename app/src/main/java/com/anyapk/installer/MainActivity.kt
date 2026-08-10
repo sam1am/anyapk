@@ -59,7 +59,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         selectApkButton.setOnClickListener {
-            selectApkLauncher.launch("application/vnd.android.package-archive")
+            // Anything but a plain APK arrives with a MIME type the picker won't map back
+            // to a bundle, so the filter has to stay open and let PackageBundle decide.
+            selectApkLauncher.launch("*/*")
         }
     }
 
@@ -175,7 +177,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showConnectedState() {
-        statusText.text = "✅ Ready to Install APKs\n\nYou're all set! Open any APK file and select anyapk to install."
+        statusText.text = "✅ Ready to Install\n\nYou're all set! Open any APK, APKS, APKM or XAPK file and select anyapk to install."
         actionButton.isEnabled = false
         actionButton.text = getString(R.string.btn_connected)
         testConnectionButton.visibility = Button.GONE

@@ -49,6 +49,8 @@ If you believe software should serve users rather than control them, anyapk is f
 - **No root required**: Uses Android's built-in wireless ADB
 - **No external dependencies**: Everything runs locally on your device
 - **System-wide integration**: Register as an APK handler to install from any file manager
+- **Split bundles too**: `.apks`, `.apkm` and `.xapk` install as a single session, with only the splits your device actually needs
+- **Expansion files**: `.obb` files are copied into place over ADB, including the ones bundled inside an `.xapk`
 - **Direct file selection**: Built-in file picker if you don't have a file manager handy
 - **Self-updating**: Optionally checks GitHub releases and installs new versions over the same ADB connection
 
@@ -138,7 +140,7 @@ That's it! anyapk is now permanently connected and ready to use.
 Once paired, installing APK files is effortless:
 
 #### Method 1: From Any File Manager
-1. Open any APK file in your file manager, browser, or download folder
+1. Open any APK or bundle file in your file manager, browser, or download folder
 2. In the **Open with** chooser, pick **anyapk** instead of the system Package installer
 3. Tap **Just once**, or **Always** to make anyapk your default APK handler
 4. Tap **Install**
@@ -148,10 +150,33 @@ Once paired, installing APK files is effortless:
 
 #### Method 2: Using anyapk's Built-in Picker
 1. Open anyapk
-2. Tap **Select APK to Install**
+2. Tap **Select a File to Install**
 3. Browse and select your APK file
 4. Tap **Install**
 5. Done!
+
+### Supported File Types
+
+| Format | What it is | What anyapk does |
+| --- | --- | --- |
+| `.apk` | A single app package | Installs it |
+| `.apks` | An APK set from bundletool or SAI | Installs the base plus the splits that match this device |
+| `.apkm` | APKMirror's bundle | Same |
+| `.xapk` | APKPure's bundle | Same, then copies any expansion files it carries |
+| `.obb` | An expansion file on its own | Copies it to `Android/obb/<package>/` |
+| `.aab` | An Android App Bundle | Nothing — see below |
+
+anyapk goes by what's inside the file, not the extension, so a bundle saved under the wrong name still installs.
+
+**On split selection.** A bundle carries a separate APK per CPU architecture, screen density and language. anyapk installs the base, every feature split, the one architecture your device runs, the density bucket that matches your screen, and your device's languages (English always tags along, since it's what most apps fall back to). Anything it can't classify is installed rather than dropped.
+
+**On `.aab`.** An Android App Bundle is a build artifact for Google Play, not an installable package — Play converts it into APKs before it ever reaches a device, using bundletool and the developer's signing key. Neither lives on your phone. Convert it on a computer first:
+
+```bash
+bundletool build-apks --bundle=app.aab --output=app.apks --mode=universal
+```
+
+then open the resulting `.apks` in anyapk. Opening an `.aab` directly gets you this explanation rather than a silent failure.
 
 ### Settings
 
@@ -164,6 +189,8 @@ Open the menu (⋮) on the main screen and choose **Settings**:
 ## How It Works
 
 anyapk uses LibADB Android to establish a local ADB connection via wireless debugging. It finds the pairing and connection ports itself over mDNS - that's why you only ever type a 6-digit code, never a port. Once paired, it maintains the connection and can install any APK file using the ADB install protocol - the same method developers use, but running entirely on your device.
+
+Bundles go through the same connection using a package installer session: anyapk opens one with `install-create`, streams each split straight out of the archive with `install-write`, and finalizes with `install-commit`. Nothing is unpacked to disk, so installing a 2 GB `.xapk` needs no more free space than the file itself, and a session that can't be finished is abandoned rather than left holding space on the device. Expansion files go the same way — the app's own sandbox can't write to another package's `Android/obb/` directory, but the ADB shell still can.
 
 No internet connection required. No cloud services. No remote servers. Just you and your device. (The optional update check is the one exception - it contacts GitHub, and you can turn it off in Settings.)
 

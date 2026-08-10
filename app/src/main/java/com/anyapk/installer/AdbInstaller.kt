@@ -1,14 +1,21 @@
 package com.anyapk.installer
 
 import android.content.Context
+import io.github.muntashirakon.adb.AbsAdbConnectionManager
 import io.github.muntashirakon.adb.AdbStream
 import kotlinx.coroutines.*
+import java.io.InputStream
 
 object AdbInstaller {
 
     private const val LOCALHOST = "127.0.0.1"
     private const val DEFAULT_PORT = 5555
     private const val SHELL_READ_TIMEOUT_MS = 3000
+
+    /** Long enough for a slow commit on a big app; short enough to not hang forever. */
+    private const val COMMAND_TIMEOUT_MS = 60_000L
+    private const val COMMIT_TIMEOUT_MS = 300_000L
+    private const val TRANSFER_TIMEOUT_MS = 300_000L
 
     /**
      * Gets the target IP address from settings, falling back to localhost
@@ -193,20 +200,13 @@ object AdbInstaller {
 
     suspend fun install(context: Context, apkPath: String): Result<String> = withContext(Dispatchers.IO) {
         var stream: AdbStream? = null
-        var manager: io.github.muntashirakon.adb.AbsAdbConnectionManager? = null
+        var manager: AbsAdbConnectionManager? = null
         try {
             // Invalidate cache before install attempt
             lastConnectionCheck = 0
 
             // Create a NEW manager instance for this install to avoid stale connections
-            manager = object : io.github.muntashirakon.adb.AbsAdbConnectionManager() {
-                private val delegate = AdbConnectionManager.getInstance(context)
-
-                override fun getPrivateKey() = delegate.getPrivateKey()
-                override fun getCertificate() = delegate.getCertificate()
-                override fun getDeviceName() = delegate.getDeviceName()
-            }
-            manager.setApi(android.os.Build.VERSION.SDK_INT)
+            manager = createManager(context)
 
             // Connect to local ADB using auto-discovery
             if (!manager.autoConnect(context, 10000)) {
@@ -217,17 +217,8 @@ object AdbInstaller {
             val apkFile = java.io.File(apkPath)
             val apkSize = apkFile.length()
 
-            // On Android 14+ (API 34) the package manager rejects APKs whose
-            // targetSdk is below 23 unless this flag is set. Older Android
-            // versions don't recognize the flag, so only add it when needed.
-            val bypassFlag = if (android.os.Build.VERSION.SDK_INT >= 34) {
-                "--bypass-low-target-sdk-block "
-            } else {
-                ""
-            }
-
             // Open install stream with size
-            stream = manager.openStream("exec:cmd package install $bypassFlag-S $apkSize")
+            stream = manager.openStream("exec:cmd package install ${bypassFlag()}-S $apkSize")
 
             // Stream the APK data
             val outputStream = stream.openOutputStream()
@@ -300,4 +291,270 @@ object AdbInstaller {
             }
         }
     }
+
+    /**
+     * Installs a set of APKs — a base plus its splits — as one atomic session, the same
+     * way `adb install-multiple` does: create a session, stream each piece into it, then
+     * commit. A session that is not committed is abandoned so it doesn't sit around
+     * holding disk space on the device.
+     *
+     * [sources] must start with the base APK. [onProgress] is called on the main thread.
+     */
+    suspend fun installMultiple(
+        context: Context,
+        sources: List<PackageBundle.Source>,
+        onProgress: suspend (String) -> Unit = {}
+    ): Result<String> = withContext(Dispatchers.IO) {
+        if (sources.isEmpty()) {
+            return@withContext Result.failure(Exception("No APKs to install"))
+        }
+
+        lastConnectionCheck = 0
+        var manager: AbsAdbConnectionManager? = null
+        var sessionId: String? = null
+
+        try {
+            manager = createManager(context)
+            if (!manager.autoConnect(context, 10000)) {
+                return@withContext Result.failure(Exception("Failed to connect to ADB. Make sure wireless debugging is enabled and you've paired."))
+            }
+
+            val totalSize = sources.sumOf { it.size }
+            val created = runExec(manager, "cmd package install-create -r ${bypassFlag()}-S $totalSize")
+            sessionId = SESSION_ID.find(created)?.groupValues?.get(1)
+                ?: return@withContext Result.failure(
+                    Exception(created.ifEmpty { "The package manager refused to open an install session" })
+                )
+
+            sources.forEachIndexed { index, source ->
+                // The split name only has to be unique within the session; adb uses the
+                // same index-prefixed form, which keeps duplicate file names apart.
+                val splitName = "${index}_${PackageBundle.sanitizeFileName(source.name)}"
+                val label = "${index + 1}/${sources.size} · ${source.name}"
+
+                val written = manager.openStream(
+                    "exec:cmd package install-write -S ${source.size} $sessionId $splitName -"
+                ).use { stream ->
+                    val output = stream.openOutputStream()
+                    source.open().use { input ->
+                        copyWithProgress(input, output, source.size) { percent ->
+                            onMain { onProgress("Sending $label — $percent%") }
+                        }
+                    }
+                    output.flush()
+                    readResponse(stream, TRANSFER_TIMEOUT_MS)
+                }
+
+                if (written.contains("Failure", ignoreCase = true)) {
+                    throw Exception("Could not stage ${source.name}: $written")
+                }
+            }
+
+            onMain { onProgress("Committing install…") }
+            val committed = runExec(manager, "cmd package install-commit $sessionId", COMMIT_TIMEOUT_MS)
+
+            if (committed.contains("Success", ignoreCase = true)) {
+                sessionId = null // committed sessions must not be abandoned
+                lastConnectionCheck = System.currentTimeMillis()
+                lastConnectionStatus = ConnectionStatus.CONNECTED
+                Result.success("Installation successful")
+            } else {
+                Result.failure(Exception(committed.ifEmpty { "Install was not confirmed by the package manager" }))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        } finally {
+            val orphaned = sessionId
+            if (orphaned != null && manager != null) {
+                try {
+                    runExec(manager, "cmd package install-abandon $orphaned", 10_000L)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            try {
+                manager?.close()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /**
+     * Copies an expansion file into `/sdcard/Android/obb/<package>/`. The app itself can't
+     * write there — scoped storage walls off other packages' obb directories even with
+     * all-files access — so this goes over ADB, where the shell user still can.
+     */
+    // The path is resolved by the remote shell, not by this process, so the usual
+    // Environment.getExternalStorageDirectory() advice doesn't apply.
+    @android.annotation.SuppressLint("SdCardPath")
+    suspend fun pushObb(
+        context: Context,
+        obb: PackageBundle.Obb,
+        onProgress: suspend (String) -> Unit = {}
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val packageName = obb.packageName
+        if (!VALID_PACKAGE.matches(packageName)) {
+            return@withContext Result.failure(Exception("\"$packageName\" is not a valid package name"))
+        }
+
+        val directory = "/sdcard/Android/obb/$packageName"
+        val remotePath = "$directory/${obb.fileName}"
+        var manager: AbsAdbConnectionManager? = null
+
+        try {
+            manager = createManager(context)
+            if (!manager.autoConnect(context, 10000)) {
+                return@withContext Result.failure(Exception("Failed to connect to ADB."))
+            }
+
+            // `head -c` stops after exactly this many bytes and exits, which is what ends
+            // the command — the ADB protocol has no way to half-close a stream, so `cat`
+            // would simply block forever waiting on an EOF that never arrives. The marker
+            // is how we learn the shell got that far at all.
+            manager.openStream(
+                "exec:mkdir -p $directory && head -c ${obb.source.size} > $remotePath && echo $PUSH_MARKER"
+            ).use { stream ->
+                val output = stream.openOutputStream()
+                obb.source.open().use { input ->
+                    copyWithProgress(input, output, obb.source.size) { percent ->
+                        onMain { onProgress("Copying ${obb.fileName} — $percent%") }
+                    }
+                }
+                output.flush()
+                // Whatever the shell says here is advisory; the size check below decides.
+                readResponse(stream, TRANSFER_TIMEOUT_MS) { it.contains(PUSH_MARKER) }
+            }
+
+            val reported = runExec(manager, "stat -c %s $remotePath", 15_000L) { it.contains("\n") }
+                .trim().lines().lastOrNull()?.trim()?.toLongOrNull()
+
+            if (reported == obb.source.size) {
+                Result.success(remotePath)
+            } else {
+                Result.failure(
+                    Exception(
+                        "Copied ${reported ?: 0} of ${obb.source.size} bytes to $remotePath"
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        } finally {
+            try {
+                manager?.close()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    // -- Shared plumbing ------------------------------------------------------------------
+
+    private val SESSION_ID = Regex("\\[(\\d+)]")
+    private val VALID_PACKAGE = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+")
+
+    /** Printed by the remote shell once a pushed file is fully written. */
+    private const val PUSH_MARKER = "ANYAPK_PUSH_DONE"
+
+    /**
+     * A fresh manager per operation. Reusing one across installs picks up stale
+     * connections, which fail in ways that look like a pairing problem.
+     */
+    private fun createManager(context: Context): AbsAdbConnectionManager {
+        val manager = object : AbsAdbConnectionManager() {
+            private val delegate = AdbConnectionManager.getInstance(context)
+
+            override fun getPrivateKey() = delegate.getPrivateKey()
+            override fun getCertificate() = delegate.getCertificate()
+            override fun getDeviceName() = delegate.getDeviceName()
+        }
+        manager.setApi(android.os.Build.VERSION.SDK_INT)
+        return manager
+    }
+
+    /**
+     * On Android 14+ (API 34) the package manager rejects APKs whose targetSdk is below
+     * 23 unless this flag is set. Older Android versions don't recognize the flag, so
+     * only add it when needed.
+     */
+    private fun bypassFlag(): String {
+        return if (android.os.Build.VERSION.SDK_INT >= 34) "--bypass-low-target-sdk-block " else ""
+    }
+
+    private suspend fun runExec(
+        manager: AbsAdbConnectionManager,
+        command: String,
+        timeoutMs: Long = COMMAND_TIMEOUT_MS,
+        isComplete: ((String) -> Boolean)? = null
+    ): String {
+        return manager.openStream("exec:$command").use { stream ->
+            if (isComplete == null) readResponse(stream, timeoutMs)
+            else readResponse(stream, timeoutMs, isComplete)
+        }
+    }
+
+    /**
+     * Reads a command's output until it says how it went, or the timeout elapses.
+     * `available()` is not reliable on ADB piped streams, so this blocks on read and
+     * leans on the timeout instead of polling.
+     */
+    private suspend fun readResponse(
+        stream: AdbStream,
+        timeoutMs: Long,
+        isComplete: (String) -> Boolean = { it.contains("Success", ignoreCase = true) || it.contains("Failure", ignoreCase = true) }
+    ): String {
+        val output = StringBuilder()
+        val input = stream.openInputStream()
+        val buffer = ByteArray(1024)
+
+        withTimeoutOrNull(timeoutMs) {
+            runInterruptible {
+                while (true) {
+                    val read = try {
+                        input.read(buffer)
+                    } catch (e: java.io.IOException) {
+                        -1
+                    }
+                    if (read <= 0) break
+                    output.append(String(buffer, 0, read))
+                    if (isComplete(output.toString())) break
+                }
+            }
+        }
+
+        return output.toString().trim()
+    }
+
+    private suspend fun copyWithProgress(
+        input: InputStream,
+        output: java.io.OutputStream,
+        total: Long,
+        onPercent: suspend (Int) -> Unit
+    ) {
+        val buffer = ByteArray(64 * 1024)
+        var sent = 0L
+        var lastReported = -1
+
+        while (true) {
+            val read = input.read(buffer)
+            if (read == -1) break
+            output.write(buffer, 0, read)
+            sent += read
+
+            if (total > 0) {
+                val percent = ((sent * 100) / total).toInt()
+                if (percent != lastReported) {
+                    lastReported = percent
+                    onPercent(percent)
+                }
+            }
+            // Long transfers must stay cancellable when the user backs out.
+            currentCoroutineContext().ensureActive()
+        }
+    }
+
+    private suspend fun onMain(block: suspend () -> Unit) = withContext(Dispatchers.Main) { block() }
 }

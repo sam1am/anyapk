@@ -6,7 +6,9 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.provider.Settings
+import android.util.Log
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -14,15 +16,21 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 
 class InstallActivity : AppCompatActivity() {
 
     private lateinit var apkUri: Uri
     private lateinit var infoText: TextView
     private lateinit var installButton: Button
+
+    /** The original file name, which is the only way to recognise a bare .obb. */
+    private lateinit var displayName: String
 
     /** What stands between the user and a working install. */
     private sealed class Blocker {
@@ -51,8 +59,8 @@ class InstallActivity : AppCompatActivity() {
             return
         }
 
-        val fileName = apkUri.lastPathSegment ?: "Unknown APK"
-        infoText.text = getString(R.string.install_ready, fileName)
+        displayName = resolveDisplayName(apkUri)
+        infoText.text = getString(R.string.install_ready, displayName)
 
         installButton.setOnClickListener {
             installApk()
@@ -132,46 +140,149 @@ class InstallActivity : AppCompatActivity() {
     }
 
     private suspend fun performInstall() {
-        var tempFile: File? = null
+        val staged = File(cacheDir, "temp_install.bin")
         try {
-            // Copy APK to accessible location
-            val file = File(cacheDir, "temp_install.apk")
-            tempFile = file
-            contentResolver.openInputStream(apkUri)?.use { input ->
-                FileOutputStream(file).use { output ->
-                    input.copyTo(output)
+            infoText.text = getString(R.string.reading_package)
+            withContext(Dispatchers.IO) {
+                contentResolver.openInputStream(apkUri)?.use { input ->
+                    FileOutputStream(staged).use { output -> input.copyTo(output) }
+                } ?: throw IOException("Could not read the selected file")
+            }
+
+            val opened = withContext(Dispatchers.IO) {
+                PackageBundle.open(this@InstallActivity, staged, displayName)
+            }
+
+            opened.use {
+                when (val payload = it.payload) {
+                    is PackageBundle.Payload.Apk -> installSingle(payload.file)
+                    is PackageBundle.Payload.Split -> installSplits(payload)
+                    is PackageBundle.Payload.ObbOnly ->
+                        pushExpansionFiles(listOf(payload.obb), appInstalled = false)
                 }
             }
-
-            // Install using ADB
-            infoText.text = getString(R.string.installing)
-
-            val result = AdbInstaller.install(this@InstallActivity, file.absolutePath)
-
-            result.onSuccess {
-                Toast.makeText(this, getString(R.string.install_success), Toast.LENGTH_LONG).show()
-                file.delete()
-                finish()
-            }
-
-            result.onFailure { error ->
-                val errorMsg = error.message ?: "Unknown error"
-                Toast.makeText(this, getString(R.string.install_failed, errorMsg), Toast.LENGTH_LONG).show()
-                installButton.isEnabled = true
-                infoText.text = getString(R.string.install_failed, errorMsg)
-                file.delete()
-            }
-
+        } catch (e: PackageBundle.UnsupportedException) {
+            showUnsupported(e.message ?: "This file can't be installed.")
         } catch (e: Exception) {
-            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            installButton.isEnabled = true
-            tempFile?.delete()
             e.printStackTrace()
+            reportFailure(e.message ?: "Unknown error")
+        } finally {
+            staged.delete()
         }
     }
 
+    private suspend fun installSingle(apk: File) {
+        infoText.text = getString(R.string.installing)
+        finishWith(AdbInstaller.install(this, apk.absolutePath))
+    }
+
+    private suspend fun installSplits(payload: PackageBundle.Payload.Split) {
+        if (payload.dropped.isNotEmpty()) {
+            Log.i(TAG, "Skipping splits this device doesn't need: ${payload.dropped.joinToString(", ")}")
+        }
+
+        val total = payload.apks.size + payload.dropped.size
+        infoText.text = getString(R.string.installing_parts, payload.apks.size, total)
+
+        val result = AdbInstaller.installMultiple(this, payload.apks) { progress ->
+            infoText.text = progress
+        }
+
+        result.onFailure {
+            reportFailure(it.message ?: "Unknown error")
+            return
+        }
+
+        if (payload.obbs.isNotEmpty()) {
+            pushExpansionFiles(payload.obbs, appInstalled = true)
+            return
+        }
+
+        finishWith(result)
+    }
+
+    /**
+     * Copies expansion files into place, after the app itself is installed when they came
+     * from the same archive. The app is already usable by then, so a failure here is
+     * reported without pretending the whole install came apart.
+     */
+    private suspend fun pushExpansionFiles(obbs: List<PackageBundle.Obb>, appInstalled: Boolean) {
+        val failures = mutableListOf<String>()
+
+        for (obb in obbs) {
+            infoText.text = getString(R.string.copying_expansion, obb.fileName)
+            AdbInstaller.pushObb(this, obb) { progress ->
+                infoText.text = progress
+            }.onFailure { failures += "${obb.fileName}: ${it.message}" }
+        }
+
+        if (failures.isEmpty()) {
+            val message =
+                if (appInstalled) getString(R.string.install_success)
+                else getString(R.string.expansion_success, obbs.first().packageName)
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            finish()
+        } else {
+            val preface =
+                if (appInstalled) "The app is installed, but its expansion files did not copy:\n"
+                else "The expansion file did not copy:\n"
+            reportFailure(preface + failures.joinToString("\n"))
+        }
+    }
+
+    private fun finishWith(result: Result<String>) {
+        result.onSuccess {
+            Toast.makeText(this, getString(R.string.install_success), Toast.LENGTH_LONG).show()
+            finish()
+        }
+        result.onFailure { reportFailure(it.message ?: "Unknown error") }
+    }
+
+    private fun reportFailure(message: String) {
+        Toast.makeText(this, getString(R.string.install_failed, message), Toast.LENGTH_LONG).show()
+        infoText.text = getString(R.string.install_failed, message)
+        installButton.isEnabled = true
+    }
+
+    private fun showUnsupported(message: String) {
+        infoText.text = getString(R.string.install_ready, displayName)
+        installButton.isEnabled = true
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.unsupported_title)
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    /**
+     * The file name as the user knows it. [Uri.getLastPathSegment] on a document URI is
+     * usually an opaque id, and the extension is what tells a bare .obb apart from the
+     * ZIP archive it technically is.
+     */
+    private fun resolveDisplayName(uri: Uri): String {
+        if (uri.scheme == "content") {
+            try {
+                contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                    ?.use { cursor ->
+                        if (cursor.moveToFirst() && cursor.columnCount > 0) {
+                            cursor.getString(0)?.takeIf { it.isNotBlank() }?.let { return it }
+                        }
+                    }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        return uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+            ?: "Unknown package"
+    }
+
+    companion object {
+        private const val TAG = "InstallActivity"
+    }
+
     private fun showBlockerDialog(blocker: Blocker.NeedsUser) {
-        infoText.text = getString(R.string.install_ready, apkUri.lastPathSegment ?: "Unknown APK")
+        infoText.text = getString(R.string.install_ready, displayName)
 
         AlertDialog.Builder(this)
             .setTitle(blocker.title)
