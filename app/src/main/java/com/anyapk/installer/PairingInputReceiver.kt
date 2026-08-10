@@ -1,9 +1,11 @@
 package com.anyapk.installer
 
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
@@ -15,6 +17,11 @@ import kotlinx.coroutines.launch
 class PairingInputReceiver : BroadcastReceiver() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    companion object {
+        private const val TAG = "PairingInputReceiver"
+        private const val REQUEST_RETURN_TO_APP = 3002
+    }
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != PairingInputService.ACTION_PAIRING_INPUT) {
@@ -47,6 +54,7 @@ class PairingInputReceiver : BroadcastReceiver() {
                 val result = AdbInstaller.pair(context, code, portInt)
 
                 result.onSuccess {
+                    SettingsManager.setHasPairedBefore(context)
                     showSuccessNotification(context)
                     Toast.makeText(
                         context,
@@ -57,6 +65,10 @@ class PairingInputReceiver : BroadcastReceiver() {
                     // Stop the service
                     val serviceIntent = Intent(context, PairingInputService::class.java)
                     context.stopService(serviceIntent)
+
+                    // The user is sitting in system Settings at this point — pull the
+                    // app back to the foreground so they see the connected state.
+                    returnToApp(context)
                 }
 
                 result.onFailure { error ->
@@ -68,6 +80,32 @@ class PairingInputReceiver : BroadcastReceiver() {
                     ).show()
                 }
             }
+        }
+    }
+
+    /**
+     * Brings MainActivity back to the front. CLEAR_TOP + SINGLE_TOP reuses the existing
+     * instance (delivering onNewIntent, which triggers a status refresh in onResume) and
+     * pops anything stacked above it, such as the in-app Settings screen.
+     */
+    private fun returnToApp(context: Context) {
+        try {
+            context.startActivity(mainActivityIntent(context))
+        } catch (e: Exception) {
+            // Background activity starts can be refused; the success notification is
+            // tappable as a fallback.
+            Log.w(TAG, "Could not bring the app to the foreground", e)
+        }
+    }
+
+    private fun mainActivityIntent(context: Context): Intent {
+        return Intent(context, MainActivity::class.java).apply {
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+            putExtra(MainActivity.EXTRA_FROM_PAIRING, true)
         }
     }
 
@@ -88,11 +126,19 @@ class PairingInputReceiver : BroadcastReceiver() {
     private fun showSuccessNotification(context: Context) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            REQUEST_RETURN_TO_APP,
+            mainActivityIntent(context),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(context, PairingInputService.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Pairing Successful!")
-            .setContentText("Device paired successfully")
+            .setContentText("Tap to return to anyapk")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(contentIntent)
             .setAutoCancel(true)
             .build()
 

@@ -13,6 +13,7 @@ object SettingsManager {
     private const val KEY_AUTO_UPDATE_ENABLED = "auto_update_enabled"
     private const val KEY_USE_DEVICE_IP = "use_device_ip"
     private const val KEY_CUSTOM_IP = "custom_ip"
+    private const val KEY_HAS_PAIRED = "has_paired"
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -25,6 +26,18 @@ object SettingsManager {
 
     fun setAutoUpdateEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_AUTO_UPDATE_ENABLED, enabled).apply()
+    }
+
+    /**
+     * Whether this device has ever completed pairing. Used to tell "not set up yet"
+     * apart from "set up, but wireless debugging is currently off".
+     */
+    fun hasPairedBefore(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_HAS_PAIRED, false)
+    }
+
+    fun setHasPairedBefore(context: Context) {
+        getPrefs(context).edit().putBoolean(KEY_HAS_PAIRED, true).apply()
     }
 
     // IP address settings

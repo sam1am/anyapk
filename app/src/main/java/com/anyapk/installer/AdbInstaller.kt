@@ -8,6 +8,7 @@ object AdbInstaller {
 
     private const val LOCALHOST = "127.0.0.1"
     private const val DEFAULT_PORT = 5555
+    private const val SHELL_READ_TIMEOUT_MS = 3000
 
     /**
      * Gets the target IP address from settings, falling back to localhost
@@ -140,6 +141,53 @@ object AdbInstaller {
                 ex.printStackTrace()
             }
             Result.failure(Exception("Authorization required. Check for 'Allow USB debugging?' prompt and tap 'Always allow'."))
+        }
+    }
+
+    /**
+     * Runs a shell command over the existing ADB connection and returns whatever it
+     * printed. Silent commands simply return an empty string once the read window
+     * elapses, so callers that need certainty should verify the effect separately
+     * rather than trusting the output.
+     */
+    suspend fun runShellCommand(context: Context, command: String): Result<String> = withContext(Dispatchers.IO) {
+        var stream: AdbStream? = null
+        return@withContext try {
+            val manager = AdbConnectionManager.getInstance(context)
+
+            if (!manager.autoConnect(context, 10000)) {
+                return@withContext Result.failure(Exception("Could not connect to ADB."))
+            }
+
+            stream = manager.openStream("shell:$command")
+            val output = StringBuilder()
+            val inputStream = stream.openInputStream()
+            val buffer = ByteArray(1024)
+
+            var totalWait = 0
+            while (totalWait < SHELL_READ_TIMEOUT_MS) {
+                if (inputStream.available() > 0) {
+                    val bytesRead = inputStream.read(buffer)
+                    if (bytesRead <= 0) break
+                    output.append(String(buffer, 0, bytesRead))
+                } else {
+                    kotlinx.coroutines.delay(100)
+                    totalWait += 100
+                }
+            }
+
+            // Leave the shared connection open; the caller is usually mid-flow.
+            stream.close()
+
+            Result.success(output.toString().trim())
+        } catch (e: Exception) {
+            e.printStackTrace()
+            try {
+                stream?.close()
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+            }
+            Result.failure(e)
         }
     }
 

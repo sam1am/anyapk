@@ -1,11 +1,20 @@
-> [!CAUTION]
-> This repo was previously infected as part of the [PolinRider](https://github.com/OpenSourceMalware/PolinRider) supply chain attack. It has now been cleaned. Users who installed any version of the APK are not affected. Users who cloned the repo and opened it in VSCode (or its forks) may have been affected. See more info [here](https://github.com/sam1am/anyapk/discussions/64).
+<p align="center">
+  <img src="docs/images/icon.png" alt="anyapk" width="128" height="128">
+</p>
 
 # anyapk
 
 **Bypass Google And Install Any APK You Want On The Device You Own.**
 
+[Website](https://sam1am.github.io/anyapk/) · [Releases](https://github.com/sam1am/anyapk/releases)
+
 anyapk is a lightweight Android application installer that bypasses Google's developer verification requirements by using local ADB (Android Debug Bridge) connections. Smoothly install any APK file on your device without restrictions, gatekeepers, or corporate approval.
+
+<p align="center">
+  <img src="docs/images/screenshots/open_with.jpg" alt="Android's Open with chooser showing anyapk selected alongside Package installer and Termux" width="480">
+  <br>
+  <em>Open any APK, pick anyapk instead of the Package installer, and it installs.</em>
+</p>
 
 ## Why We Made This
 
@@ -34,10 +43,12 @@ If you believe software should serve users rather than control them, anyapk is f
 ## Features
 
 - **One-time setup**: Pair once using wireless debugging, use forever
+- **Pair from the notification shade**: Reply to a notification with the pairing code — no split-screen gymnastics
 - **No root required**: Uses Android's built-in wireless ADB
 - **No external dependencies**: Everything runs locally on your device
 - **System-wide integration**: Register as an APK handler to install from any file manager
 - **Direct file selection**: Built-in file picker if you don't have a file manager handy
+- **Self-updating**: Optionally checks GitHub releases and installs new versions over the same ADB connection
 
 ## Installation
 
@@ -78,32 +89,45 @@ If you can't install the APK directly (due to existing restrictions), use ADB fr
 
 ### First-Time Setup
 
-1. **Enable Developer Options** (if not already enabled):
-   - Open **Settings → About Phone**
-   - Tap **Build Number** 7 times
-   - You'll see "You are now a developer!"
+### 1. Enable Developer Options
 
-2. **Enable Wireless Debugging**:
-   - Go to **Settings → Developer Options**
-   - Enable **Wireless debugging**
-   - Approve your WiFi network if prompted
+- Open **Settings → About Phone**
+- Tap **Build Number** 7 times
+- You'll see "You are now a developer!"
 
-3. **Pair anyapk** (one-time only):
-   - Open anyapk
-   - Tap **Enter Pairing Code**
-   - Follow the split-screen instructions:
-     1. Tap the **Recent Apps** button (square icon)
-     2. Long-press on **Settings**, select **"Open in split screen view"**
-     3. Select **anyapk** for the other half of the screen
-     4. In Settings: **Developer Options → Wireless Debugging**
-     5. Tap **"Pair device with pairing code"**
-     6. Enter the pairing code and port in anyapk
-     7. Tap **Pair**
+### 2. Grant notification permission (Android 13+)
 
-4. **Authorize the connection**:
-   - You'll see an "Allow USB debugging?" prompt
-   - Check **"Always allow from this computer"**
-   - Tap **Allow**
+- Open anyapk. The checklist shows what's still missing — tap **Grant Notification Permission**
+- This is how you'll type the pairing code, so it's required, not optional
+
+<img src="docs/images/screenshots/main_screen_no_permissions_granted.jpg" alt="anyapk setup checklist" width="260">
+
+### 3. Pair with wireless ADB
+
+1. Tap **Start Pairing**. anyapk posts a pairing notification and opens Developer Options for you.
+
+   <img src="docs/images/screenshots/tap-pair-device-alert-highlighted.jpg" alt="anyapk's pairing notification appearing over Developer Options" width="260">
+
+2. Scroll to the **Debugging** section, turn on **Wireless debugging**, then tap the row to open it. Approve your WiFi network if prompted.
+
+   <img src="docs/images/screenshots/dev_options_wireless_debugging_toggle.jpg" alt="Wireless debugging toggle in Developer Options" width="260">
+
+3. Tap **Pair device with pairing code** — not the QR code option.
+
+   <img src="docs/images/screenshots/wireless_debugging_menu.jpg" alt="Pair device with pairing code option on the Wireless debugging screen" width="260">
+
+4. A dialog shows your 6-digit pairing code. Don't dismiss it and don't leave Settings.
+
+   <img src="docs/images/screenshots/pairing_code_displayed.jpg" alt="Pair with device dialog showing a six-digit pairing code" width="260">
+
+   > [!IMPORTANT]
+   > The pairing code dialog must stay open and visible behind the notification shade the whole time. Android only advertises the pairing service while that dialog is on screen — if you close it or back out of Settings to switch to anyapk, the code dies with it and pairing will fail. Pull the shade down *over* the dialog; don't leave the screen.
+
+5. Pull down the notification shade, find the anyapk notification, tap **Reply**, type the 6 digits, and send. anyapk pairs and pulls itself back to the foreground.
+
+   <img src="docs/images/screenshots/entering_pairing_code_in_notification.jpg" alt="Entering the pairing code in anyapk's notification reply field" width="260">
+
+6. Approve the **"Allow USB debugging?"** prompt — check **"Always allow from this computer"** and tap **Allow**. If no prompt appears, tap **Test Connection** in anyapk to trigger it.
 
 That's it! anyapk is now permanently connected and ready to use.
 
@@ -113,9 +137,12 @@ Once paired, installing APK files is effortless:
 
 #### Method 1: From Any File Manager
 1. Open any APK file in your file manager, browser, or download folder
-2. Select **anyapk** as the installer
-3. Tap **Install**
-4. Done!
+2. In the **Open with** chooser, pick **anyapk** instead of the system Package installer
+3. Tap **Just once**, or **Always** to make anyapk your default APK handler
+4. Tap **Install**
+5. Done!
+
+<img src="docs/images/screenshots/open_with.jpg" alt="Android's Open with chooser showing anyapk selected alongside Package installer and Termux" width="420">
 
 #### Method 2: Using anyapk's Built-in Picker
 1. Open anyapk
@@ -124,11 +151,19 @@ Once paired, installing APK files is effortless:
 4. Tap **Install**
 5. Done!
 
+### Settings
+
+Open the menu (⋮) on the main screen and choose **Settings**:
+
+- **Auto-update** (on by default) - checks GitHub releases once per session, after ADB is connected, and offers to install a newer version. The app is killed and restarts on the new version during a self-update.
+- **Check for Updates** - runs the same check on demand
+- **Use Device Local IP** (on by default) - the address anyapk connects to. Turn it off to enter a custom IP if detection picks the wrong interface.
+
 ## How It Works
 
-anyapk uses LibADB Android to establish a local ADB connection via wireless debugging. Once paired, it maintains the connection and can install any APK file using the ADB install protocol - the same method developers use, but running entirely on your device.
+anyapk uses LibADB Android to establish a local ADB connection via wireless debugging. It finds the pairing and connection ports itself over mDNS - that's why you only ever type a 6-digit code, never a port. Once paired, it maintains the connection and can install any APK file using the ADB install protocol - the same method developers use, but running entirely on your device.
 
-No internet connection required. No cloud services. No remote servers. Just you and your device.
+No internet connection required. No cloud services. No remote servers. Just you and your device. (The optional update check is the one exception - it contacts GitHub, and you can turn it off in Settings.)
 
 ## Technical Details
 
@@ -138,6 +173,8 @@ No internet connection required. No cloud services. No remote servers. Just you 
   - `INTERNET` - For local ADB socket connection
   - `ACCESS_NETWORK_STATE` - To detect network availability
   - `REQUEST_INSTALL_PACKAGES` - To initiate APK installations
+  - `POST_NOTIFICATIONS` - To show the pairing notification you reply to
+  - `FOREGROUND_SERVICE` - To keep pairing discovery alive while you're in Settings
 
 **Key Dependencies**:
 - LibADB Android 3.1.0 - Local ADB client implementation
@@ -148,9 +185,10 @@ No internet connection required. No cloud services. No remote servers. Just you 
 
 anyapk runs entirely on your device. It:
 - Does not collect any data
-- Does not connect to any remote servers
 - Does not transmit any information about you or your usage
 - Does not track installations
+
+The only network request anyapk makes off your local network is the update check, which asks the GitHub releases API for the latest version number. It sends nothing about you or what you've installed, and you can disable it in **Settings → Auto-update**. Installing APKs never leaves your device.
 
 Your activity is your business, not ours.
 
@@ -170,6 +208,15 @@ Your activity is your business, not ours.
 - Make sure you're in Developer Options → Wireless debugging
 - Look for "Pair device with pairing code" button
 - If missing, try toggling wireless debugging off and on
+
+**No anyapk notification to reply to:**
+- Grant the notification permission (Android 13+): **Settings → Apps → anyapk → Notifications**
+- Tap **Start Pairing** in anyapk again to re-post it
+
+**Pairing fails every time:**
+- The pairing code dialog has to still be open behind the shade when you send the code. If you left the Wireless debugging screen, tap "Pair device with pairing code" again to get a fresh code
+- Each code is single-use — if you retry, use the new code currently on screen, not the one you typed before
+- Make sure your phone is on WiFi and not on a network that blocks device-to-device (mDNS) discovery
 
 **Installation fails with "ADB unauthorized":**
 - Unpair the device in Settings → Wireless debugging → Paired devices
