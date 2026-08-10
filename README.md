@@ -22,6 +22,8 @@ Android devices belong to their users, not corporations or governments. Yet with
 
 anyapk returns control to where it belongs: in your hands.
 
+Learn more about how Google is restricting your freedoms and how you can fight back at [keepandroidopen.org](https://keepandroidopen.org/).
+
 ## Manifesto: Application Freedom
 
 When a corporation becomes a gatekeeper, they don't stand alone at the gate. Their partners become gatekeepers. Government jurisdictions become gatekeepers. And suddenly, what began as a "quality control measure" transforms into a lever of control.
