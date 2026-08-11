@@ -124,11 +124,17 @@
                 android:value=".MainActivity" />
         </activity>
 
-        <!-- Pairing Input Service with RemoteInput -->
+        <!--
+            Pairing Input Service with RemoteInput.
+
+            No android:foregroundServiceType: at targetSdk 30 the platform does not
+            require one, and the previous "shortService" value was both unenforced here
+            and missing its FOREGROUND_SERVICE_SHORT_SERVICE permission. A targetSdk
+            bump to 34+ must add both back together.
+        -->
         <service
             android:name=".PairingInputService"
-            android:exported="false"
-            android:foregroundServiceType="shortService" />
+            android:exported="false" />
 
         <!-- Pairing Input Receiver -->
         <receiver
@@ -136,6 +142,7 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.anyapk.installer.PAIRING_INPUT" />
+                <action android:name="com.anyapk.installer.PAIRING_CANCEL" />
             </intent-filter>
         </receiver>
 
