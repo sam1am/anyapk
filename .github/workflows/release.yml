@@ -43,28 +43,18 @@ jobs:
   build:
     needs: version
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # The release build comes from the tag itself, not from whatever main has
-          # moved on to since.
-          - variant: main
-            ref: ${{ github.ref_name }}
-            suffix: ""
-          - variant: dev
-            ref: dev
-            suffix: "-dev"
     steps:
+      # The release build comes from the tag itself, not from whatever main has
+      # moved on to since.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.ref }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 1
 
       - name: Align version for build
         run: |
           set -euo pipefail
-          version="${{ needs.version.outputs.version }}${{ matrix.suffix }}"
+          version="${{ needs.version.outputs.version }}"
           code="${{ needs.version.outputs.versionCode }}"
           sed -i -E "s/(versionName\s*=\s*)\"[^\"]+\"/\1\"${version}\"/" app/build.gradle.kts
           sed -i -E "s/(versionCode\s*=\s*)[0-9]+/\1${code}/" app/build.gradle.kts
@@ -108,10 +98,9 @@ jobs:
           # One APK per ABI plus the universal fallback. UpdateChecker.selectAsset()
           # matches on the trailing -<abi>.apk, so the suffix here is load-bearing:
           # renaming these silently breaks in-app updates.
-          # A branch that predates the ABI split emits a single app-release.apk instead.
-          # That build carries every ABI, so it is the universal one by definition. The
-          # dev variant builds from the dev branch rather than from the tag, so it lags
-          # main by design and this is a normal state, not a failure.
+          # A commit that predates the ABI split emits a single app-release.apk instead,
+          # which carries every ABI and so is the universal one by definition. Kept so
+          # that tagging an older commit degrades gracefully rather than failing here.
           shopt -s nullglob
           staged=0
           for src in app/build/outputs/apk/release/app-*-release.apk \
@@ -122,7 +111,7 @@ jobs:
             case "$src" in *-unsigned*) continue;; esac
             abi=$(basename "$src"); abi=${abi#app-}; abi=${abi%release.apk}
             abi=${abi%-}; abi=${abi:-universal}
-            cp "$src" "release/anyapk${{ matrix.suffix }}-${{ needs.version.outputs.version }}-${abi}.apk"
+            cp "$src" "release/anyapk-${{ needs.version.outputs.version }}-${abi}.apk"
             staged=$((staged + 1))
           done
           if [ "$staged" -eq 0 ]; then
@@ -133,7 +122,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: apk-${{ matrix.variant }}
+          name: apk
           path: release/*.apk
           retention-days: 7
           if-no-files-found: error
@@ -146,16 +135,10 @@ jobs:
     needs: [version, build]
     runs-on: ubuntu-latest
     steps:
-      - name: Download main APK
+      - name: Download APKs
         uses: actions/download-artifact@v4
         with:
-          name: apk-main
-          path: release
-
-      - name: Download dev APK
-        uses: actions/download-artifact@v4
-        with:
-          name: apk-dev
+          name: apk
           path: release
 
       - name: Create GitHub release
@@ -168,4 +151,3 @@ jobs:
           generate_release_notes: true
           files: |
             release/anyapk-${{ needs.version.outputs.version }}-*.apk
-            release/anyapk-dev-${{ needs.version.outputs.version }}-*.apk
