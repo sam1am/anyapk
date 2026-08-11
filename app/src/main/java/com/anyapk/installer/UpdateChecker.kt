@@ -1,6 +1,7 @@
 package com.anyapk.installer
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -64,16 +65,20 @@ object UpdateChecker {
 
             // Find the APK download URL from assets
             val assets = json.getJSONArray("assets")
-            var apkUrl: String? = null
+            val apkNames = mutableListOf<String>()
+            val urlsByName = mutableMapOf<String, String>()
 
             for (i in 0 until assets.length()) {
                 val asset = assets.getJSONObject(i)
                 val name = asset.getString("name")
                 if (name.endsWith(".apk", ignoreCase = true)) {
-                    apkUrl = asset.getString("browser_download_url")
-                    break
+                    apkNames += name
+                    urlsByName[name] = asset.getString("browser_download_url")
                 }
             }
+
+            val apkUrl = selectAsset(apkNames, currentVersionName, Build.SUPPORTED_ABIS.toList())
+                ?.let { urlsByName[it] }
 
             if (apkUrl == null) {
                 Log.e(TAG, "No APK file found in latest release")
@@ -104,6 +109,34 @@ object UpdateChecker {
             Log.e(TAG, "Error checking for updates", e)
             return@withContext null
         }
+    }
+
+    /**
+     * Picks the release asset this device should install.
+     *
+     * Releases carry one APK per ABI plus a universal fallback, and both a main and a
+     * `-dev` build of each, so "the first .apk in the list" would happily hand an arm64
+     * phone the x86_64 build or cross a user between channels. Assets are named
+     * `anyapk[-dev]-<version>-<abi>.apk`.
+     *
+     * [abis] is [Build.SUPPORTED_ABIS], the device's own preference order, so a 64-bit
+     * phone takes the arm64 build and falls back to the 32-bit one it can also run.
+     * Universal is the last resort.
+     */
+    internal fun selectAsset(
+        names: List<String>,
+        currentVersionName: String,
+        abis: List<String>
+    ): String? {
+        val wantDev = currentVersionName.contains("-dev", ignoreCase = true)
+        val channel = names.filter { it.contains("-dev-", ignoreCase = true) == wantDev }
+            .ifEmpty { return null }
+
+        for (abi in abis) {
+            channel.firstOrNull { it.endsWith("-$abi.apk", ignoreCase = true) }?.let { return it }
+        }
+        return channel.firstOrNull { it.endsWith("-universal.apk", ignoreCase = true) }
+            ?: channel.first()
     }
 
     private fun getCurrentVersionName(context: Context): String {

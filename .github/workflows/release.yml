@@ -101,13 +101,25 @@ jobs:
       - name: Build release APK
         run: ./gradlew --no-daemon assembleRelease
 
-      - name: Stage APK with release name
+      - name: Stage APKs with release names
         run: |
           set -euo pipefail
           mkdir -p release
-          src=$(find app/build/outputs/apk/release -name '*.apk' ! -name '*-unsigned*' | head -n1)
-          dest="release/anyapk${{ matrix.suffix }}-${{ needs.version.outputs.version }}.apk"
-          cp "$src" "$dest"
+          # One APK per ABI plus the universal fallback. UpdateChecker.selectAsset()
+          # matches on the trailing -<abi>.apk, so the suffix here is load-bearing:
+          # renaming these silently breaks in-app updates.
+          shopt -s nullglob
+          staged=0
+          for src in app/build/outputs/apk/release/app-*-release.apk; do
+            case "$src" in *-unsigned*) continue;; esac
+            abi=$(basename "$src"); abi=${abi#app-}; abi=${abi%-release.apk}
+            cp "$src" "release/anyapk${{ matrix.suffix }}-${{ needs.version.outputs.version }}-${abi}.apk"
+            staged=$((staged + 1))
+          done
+          if [ "$staged" -eq 0 ]; then
+            echo "No release APKs were produced" >&2
+            exit 1
+          fi
           ls -la release/
 
       - uses: actions/upload-artifact@v4
@@ -146,5 +158,5 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            release/anyapk-${{ needs.version.outputs.version }}.apk
-            release/anyapk-dev-${{ needs.version.outputs.version }}.apk
+            release/anyapk-${{ needs.version.outputs.version }}-*.apk
+            release/anyapk-dev-${{ needs.version.outputs.version }}-*.apk

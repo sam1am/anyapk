@@ -22,8 +22,6 @@ Android devices belong to their users, not corporations or governments. Yet with
 
 anyapk returns control to where it belongs: in your hands.
 
-Learn more about how Google is restricting your freedoms and how you can fight back at [keepandroidopen.org](https://keepandroidopen.org/).
-
 ## Manifesto: Application Freedom
 
 When a corporation becomes a gatekeeper, they don't stand alone at the gate. Their partners become gatekeepers. Government jurisdictions become gatekeepers. And suddenly, what began as a "quality control measure" transforms into a lever of control.
@@ -42,6 +40,8 @@ We built anyapk because we believe:
 
 If you believe software should serve users rather than control them, anyapk is for you.
 
+Anyapk is not a solution to the problem - it's a tool that helps you bypass the problem. A real solution is competent government regulation that protects users from unfair and anti-competitive lockdown practices. Learn more about how Google is restricting your freedoms and how you can fight back at [keepandroidopen.org](https://keepandroidopen.org/).
+
 ## Features
 
 - **One-time setup**: Pair once using wireless debugging, use forever
@@ -58,10 +58,22 @@ If you believe software should serve users rather than control them, anyapk is f
 
 ### Method 1: Install via APK (Recommended)
 
-1. Download the latest `anyapk.apk` from the [Releases](../../releases) page
+1. Download the latest APK from the [Releases](../../releases) page. There is one build per
+   CPU architecture — take `arm64-v8a` unless you know otherwise, since it covers virtually
+   every phone made in the last decade:
+
+   | File | For |
+   | --- | --- |
+   | `anyapk-<version>-arm64-v8a.apk` | Almost all phones and tablets |
+   | `anyapk-<version>-armeabi-v7a.apk` | Older 32-bit devices |
+   | `anyapk-<version>-x86_64.apk` | Emulators, x86 Chromebooks |
+   | `anyapk-<version>-universal.apk` | Works everywhere, roughly twice the size |
+
 2. Open the APK file on your device
 3. Grant installation permissions if prompted
 4. Welcome to application freedom
+
+Once installed, anyapk's self-updater picks the right build for your device on its own.
 
 ### Method 2: Install via ADB (The Last Time)
 
@@ -84,7 +96,7 @@ If you can't install the APK directly (due to existing restrictions), use ADB fr
 
 4. Install anyapk using ADB:
    ```bash
-   adb install anyapk.apk
+   adb install anyapk-<version>-arm64-v8a.apk
    ```
 
 5. You're done! You won't need ADB from your computer again.
