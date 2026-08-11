@@ -1,8 +1,6 @@
 package com.anyapk.installer
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -14,8 +12,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -135,6 +132,9 @@ class MainActivity : AppCompatActivity() {
             when (status) {
                 AdbInstaller.ConnectionStatus.CONNECTED -> {
                     showConnectedState()
+                    // Covers the paths that bypass the service's own teardown, e.g. the
+                    // user pairing by hand in Settings while the prompt is still up.
+                    stopPairingService()
                     // A working connection is the only chance to pick up the permission
                     // that lets anyapk re-enable wireless debugging on its own later.
                     SettingsManager.setHasPairedBefore(this@MainActivity)
@@ -164,16 +164,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * anyapk targets API 30, so POST_NOTIFICATIONS is granted implicitly at install even
+     * on Android 13+ and a runtime permission request would show nothing. What
+     * actually matters is whether the user has since switched notifications off, which is
+     * exactly what this reports.
+     */
     private fun checkNotificationPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            // On older Android versions, notification permission is auto-granted
-            true
-        }
+        return NotificationManagerCompat.from(this).areNotificationsEnabled()
     }
 
     private fun showConnectedState() {
@@ -203,10 +201,10 @@ class MainActivity : AppCompatActivity() {
             }
 
             // Step 2: Notification Permission
-            append("$step2 Step 2: Grant Notification Permission\n")
-            if (!notificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            append("$step2 Step 2: Enable Notifications\n")
+            if (!notificationPermission) {
                 append("   • Required to enter pairing codes\n")
-                append("   • Tap button below to grant\n\n")
+                append("   • Tap below to open Settings\n\n")
             } else {
                 append("   Complete!\n\n")
             }
@@ -225,8 +223,8 @@ class MainActivity : AppCompatActivity() {
 
         // Configure button based on current step
         when {
-            !notificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
-                actionButton.text = "Grant Notification Permission"
+            !notificationPermission -> {
+                actionButton.text = "Enable Notifications"
                 actionButton.isEnabled = true
                 actionButton.setOnClickListener {
                     requestNotificationPermission()
@@ -269,6 +267,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun stopPairingService() {
+        stopService(Intent(this, PairingInputService::class.java))
+    }
+
     private fun showPairingDialog() {
         // Start pairing input service with RemoteInput notification
         val serviceIntent = Intent(this, PairingInputService::class.java)
@@ -293,39 +295,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Sends the user to the system notification settings for anyapk. There is no runtime
+     * prompt to show at this targetSdk — see [checkNotificationPermission] — so toggling
+     * it back on has to happen in Settings. onResume re-runs the checklist on return.
+     */
     private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                REQUEST_NOTIFICATION_PERMISSION
-            )
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.fromParts("package", packageName, null))
         }
-    }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        if (requestCode == REQUEST_NOTIFICATION_PERMISSION) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(
-                    this,
-                    "✅ Notification permission granted!",
-                    Toast.LENGTH_SHORT
-                ).show()
-            } else {
-                Toast.makeText(
-                    this,
-                    "Notification permission is required for pairing. Please enable it in Settings.",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-            // Refresh status to update checklist
-            checkStatus()
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                "Please enable notifications for anyapk in Settings",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -427,9 +418,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val REQUEST_NOTIFICATION_PERMISSION = 1002
-
-        /** Set by [PairingInputReceiver] when it brings the app forward after pairing. */
+        /** Set by [PairingInputService] when it brings the app forward after pairing. */
         const val EXTRA_FROM_PAIRING = "com.anyapk.installer.FROM_PAIRING"
 
         // Process-wide so the prompt survives activity recreation and is shown

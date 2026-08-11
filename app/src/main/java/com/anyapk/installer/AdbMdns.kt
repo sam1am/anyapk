@@ -35,13 +35,26 @@ class AdbMdns(
     fun stop() {
         if (!running) return
         running = false
-        if (registered) {
+        unregister()
+    }
+
+    private fun unregister() {
+        if (!registered) return
+        registered = false
+        try {
             nsdManager.stopServiceDiscovery(listener)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Discovery listener was already unregistered", e)
         }
     }
 
     private fun onDiscoveryStart() {
         registered = true
+        // stop() can land before the framework confirms the start. Unregistering here is
+        // what keeps that window from leaking the registration for the life of the
+        // process — which now matters, because the pairing service stops itself far more
+        // eagerly than it used to.
+        if (!running) unregister()
     }
 
     private fun onDiscoveryStop() {

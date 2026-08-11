@@ -17,6 +17,20 @@ object AdbInstaller {
     private const val COMMIT_TIMEOUT_MS = 300_000L
     private const val TRANSFER_TIMEOUT_MS = 300_000L
 
+    /** Wireless debugging pairing codes are always exactly six digits. */
+    private val PAIRING_CODE_PATTERN = Regex("\\d{6}")
+
+    /** A real pairing handshake completes in well under a second on the loopback. */
+    private const val PAIRING_TIMEOUT_MS = 20_000L
+
+    private const val RETRY_HINT =
+        "Tap \"Pair device with pairing code\" again for a fresh code, then reply with the new one."
+
+    /**
+     * Hosts pairing attempts that may outlive the caller. Detached on purpose — see [pair].
+     */
+    private val pairingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /**
      * Gets the target IP address from settings, falling back to localhost
      */
@@ -87,16 +101,61 @@ object AdbInstaller {
         return status
     }
 
-    suspend fun pair(context: Context, pairingCode: String, pairingPort: Int): Result<Boolean> = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val manager = AdbConnectionManager.getInstance(context)
-            // Pair with the device using configured IP address
-            val targetIp = getTargetIp(context)
-            manager.pair(targetIp, pairingPort, pairingCode)
-            Result.success(true)
+    /**
+     * Pairs with the local wireless debugging service.
+     *
+     * The handshake underneath is a blocking socket read with no timeout of its own. A
+     * wrong code makes adbd tear the session down mid-handshake, and the read then never
+     * returns — which is why a mistyped code used to wedge the pairing notification until
+     * the device was rebooted. Everything here exists to guarantee this returns.
+     */
+    suspend fun pair(context: Context, pairingCode: String, pairingPort: Int): Result<Boolean> {
+        val code = pairingCode.trim()
+        if (!PAIRING_CODE_PATTERN.matches(code)) {
+            return Result.failure(
+                Exception("That is not a pairing code. Enter the 6 digits shown in the \"Pair device with pairing code\" dialog.")
+            )
+        }
+        if (pairingPort !in 1..65535) {
+            return Result.failure(
+                Exception("No pairing port found yet. Tap \"Pair device with pairing code\" in Wireless debugging, then try again.")
+            )
+        }
+
+        val targetIp = getTargetIp(context)
+
+        // Deliberately not a child of the caller's job. Cancelling a coroutine cannot
+        // interrupt a thread parked in a blocking socket read, so on timeout the only
+        // option is to abandon this thread and let it unwind whenever the socket
+        // finally errors out. Awaiting it would defeat the timeout entirely.
+        val attempt = pairingScope.async {
+            AdbConnectionManager.getInstance(context).pair(targetIp, pairingPort, code)
+        }
+
+        val paired = try {
+            withTimeoutOrNull(PAIRING_TIMEOUT_MS) { attempt.await() }
+        } catch (e: CancellationException) {
+            // The caller went away (the service was stopped). Must not be reported as a
+            // pairing failure, or the handler would run against a dead service.
+            attempt.cancel()
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            Result.failure(e)
+            attempt.cancel()
+            // The underlying messages are adbd protocol detail; keep the cause for the
+            // log and show the user something they can act on.
+            return Result.failure(Exception("Pairing failed. $RETRY_HINT", e))
+        }
+
+        return when (paired) {
+            // pair() reports a rejected code by returning false rather than throwing;
+            // ignoring the return value used to report a bad code as a success.
+            true -> Result.success(true)
+            false -> Result.failure(Exception("The device rejected that code. $RETRY_HINT"))
+            null -> {
+                attempt.cancel()
+                Result.failure(Exception("Pairing timed out. $RETRY_HINT"))
+            }
         }
     }
 

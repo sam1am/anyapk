@@ -20,7 +20,12 @@ android {
     defaultConfig {
         applicationId = "com.anyapk.installer"
         minSdk = 30  // Android 11 - Required for Wireless Debugging
-        targetSdk = 34
+        // Android 11 behaviours. anyapk is sideloaded, so there is no Play targetSdk
+        // floor to satisfy, and staying here keeps the pairing foreground service off
+        // the API 34 typed-FGS rules (which need a declared type plus a matching
+        // permission). Raising this means revisiting PairingInputService and the
+        // AndroidManifest service entry together.
+        targetSdk = 30
         versionCode = 5
         versionName = "0.0.5"
 
@@ -45,6 +50,13 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
         }
+    }
+
+    lint {
+        // anyapk is released as a sideloaded APK on GitHub and could not be listed on
+        // Play regardless (it requests WRITE_SECURE_SETTINGS and installs packages), so
+        // the Play targetSdk floor does not apply. See the targetSdk comment above.
+        disable += "ExpiredTargetSdkVersion"
     }
 
     compileOptions {
