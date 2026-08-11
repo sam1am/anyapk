@@ -250,13 +250,18 @@
   <section id="install">
     <h2>Install anyapk</h2>
     <p>
-      Download the latest <code>anyapk.apk</code> from the
+      Grab the latest build from the
       <a href="https://github.com/sam1am/anyapk/releases">releases page</a>, open it on your device,
-      and grant installation permission if prompted.
+      and grant installation permission if prompted. There is one build per CPU architecture —
+      take the <code>arm64-v8a</code> one unless you know otherwise, since it covers virtually
+      every phone made in the last decade. The <code>universal</code> build works on anything
+      at roughly twice the size. After that, anyapk updates itself and picks the right build
+      for your device on its own.
     </p>
     <p>
       If your device refuses to install it, use ADB from a computer once —
-      <code>adb install anyapk.apk</code> — and that's the last time you'll need a computer for this.
+      <code>adb install anyapk-&lt;version&gt;-arm64-v8a.apk</code> — and that's the last time
+      you'll need a computer for this.
     </p>
   </section>
 

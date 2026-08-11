@@ -30,6 +30,10 @@ android {
         versionName = "0.0.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // anyapk ships no translations of its own; this drops the ~80 locales that
+        // AppCompat and Material carry for their handful of framework strings.
+        resourceConfigurations += listOf("en")
     }
 
     signingConfigs {
@@ -43,12 +47,42 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    // Conscrypt's libconscrypt_jni.so is ~2 MB per ABI and dominates the download, so
+    // ship one APK per ABI instead of making every user carry all four. The universal
+    // APK stays as the fallback for anyone who does not know which one they need;
+    // UpdateChecker picks the matching asset automatically on upgrade.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
+    packaging {
+        resources {
+            // R8 strips unreachable Bouncy Castle classes but not their Java resources.
+            // libadb only reaches SHA-256, AES-GCM, HKDF and Base64, so the post-quantum
+            // lowmc tables and the cert-path message catalogues are pure dead weight.
+            excludes += listOf(
+                "org/bouncycastle/pqc/**",
+                "org/bouncycastle/x509/CertPathReviewerMessages*.properties",
+                "DebugProbesKt.bin",
+                "META-INF/*.version",
+                "META-INF/**/LICENSE.txt",
+                "kotlin/**",
+            )
         }
     }
 
@@ -79,7 +113,11 @@ dependencies {
     // LibADB Android
     implementation("com.github.MuntashirAkon:libadb-android:3.1.0")
 
-    // Custom Conscrypt (recommended for local ADB)
+    // Custom Conscrypt. Required, not merely recommended: pairing derives the SPAKE2
+    // secret from the TLS exporter, and PairingConnectionCtx.exportKeyingMaterial() only
+    // falls back to com.android.org.conscrypt.Conscrypt when this is absent. That is a
+    // hidden platform class, so the reflective lookup is blocked on Android 11+ and
+    // pairing fails with a correct code. Its size is handled by the ABI split above.
     implementation("org.conscrypt:conscrypt-android:2.5.3")
 
     // For key generation
