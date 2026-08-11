@@ -108,11 +108,20 @@ jobs:
           # One APK per ABI plus the universal fallback. UpdateChecker.selectAsset()
           # matches on the trailing -<abi>.apk, so the suffix here is load-bearing:
           # renaming these silently breaks in-app updates.
+          # A branch that predates the ABI split emits a single app-release.apk instead.
+          # That build carries every ABI, so it is the universal one by definition. The
+          # dev variant builds from the dev branch rather than from the tag, so it lags
+          # main by design and this is a normal state, not a failure.
           shopt -s nullglob
           staged=0
-          for src in app/build/outputs/apk/release/app-*-release.apk; do
+          for src in app/build/outputs/apk/release/app-*-release.apk \
+                     app/build/outputs/apk/release/app-release.apk; do
+            # app-release.apk is a literal, not a pattern, so nullglob does not drop it
+            # when the build did produce splits.
+            [ -f "$src" ] || continue
             case "$src" in *-unsigned*) continue;; esac
-            abi=$(basename "$src"); abi=${abi#app-}; abi=${abi%-release.apk}
+            abi=$(basename "$src"); abi=${abi#app-}; abi=${abi%release.apk}
+            abi=${abi%-}; abi=${abi:-universal}
             cp "$src" "release/anyapk${{ matrix.suffix }}-${{ needs.version.outputs.version }}-${abi}.apk"
             staged=$((staged + 1))
           done
