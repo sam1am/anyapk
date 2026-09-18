@@ -87,7 +87,7 @@ class InstallActivity : AppCompatActivity() {
      * install, or [Blocker.None] when the way is clear.
      */
     private suspend fun preflight(): Blocker {
-        if (!isDeveloperOptionsEnabled()) {
+        if (!DeveloperOptions.isEnabled(this)) {
             return Blocker.NeedsUser(
                 title = "Developer Options Required",
                 message = "anyapk installs APKs over wireless debugging, which lives in " +
@@ -299,19 +299,6 @@ class InstallActivity : AppCompatActivity() {
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
         } else {
-            true
-        }
-    }
-
-    private fun isDeveloperOptionsEnabled(): Boolean {
-        return try {
-            Settings.Global.getInt(
-                contentResolver,
-                Settings.Global.DEVELOPMENT_SETTINGS_ENABLED,
-                0
-            ) == 1
-        } catch (e: Exception) {
-            // If we can't tell, assume it's on rather than blocking a valid install.
             true
         }
     }
