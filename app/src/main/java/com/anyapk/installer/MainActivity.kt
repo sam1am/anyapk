@@ -126,7 +126,7 @@ class MainActivity : AppCompatActivity() {
                 AdbInstaller.getConnectionStatus(this@MainActivity, forceCheck)
             }
 
-            val isDeveloperModeEnabled = isDeveloperOptionsEnabled()
+            val isDeveloperModeEnabled = DeveloperOptions.isEnabled(this@MainActivity)
             val hasNotificationPermission = checkNotificationPermission()
 
             when (status) {
@@ -184,7 +184,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSetupChecklist(devModeEnabled: Boolean, notificationPermission: Boolean) {
-        val step1 = if (devModeEnabled) "✅" else "⬜"
+        // Android 17 no longer tells apps whether Developer Options are on, so there the
+        // step can't be ticked off honestly — keep the instructions up without blocking.
+        val devModeVerified = devModeEnabled && DeveloperOptions.isReadable
+        val step1 = if (devModeVerified) "✅" else if (devModeEnabled) "ℹ️" else "⬜"
         val step2 = if (notificationPermission) "✅" else "⬜"
         val step3 = if (devModeEnabled && notificationPermission) "⬜" else "⚪"
 
@@ -196,6 +199,9 @@ class MainActivity : AppCompatActivity() {
             if (!devModeEnabled) {
                 append("   • Open Settings → About Phone\n")
                 append("   • Tap \"Build Number\" 7 times\n\n")
+            } else if (!devModeVerified) {
+                append("   • If you haven't yet: Settings → About Phone,\n")
+                append("     tap \"Build Number\" 7 times\n\n")
             } else {
                 append("   Complete!\n\n")
             }
@@ -252,19 +258,6 @@ class MainActivity : AppCompatActivity() {
 
         testConnectionButton.visibility = Button.GONE
         selectApkButton.visibility = Button.GONE
-    }
-
-    private fun isDeveloperOptionsEnabled(): Boolean {
-        return try {
-            android.provider.Settings.Global.getInt(
-                contentResolver,
-                android.provider.Settings.Global.DEVELOPMENT_SETTINGS_ENABLED,
-                0
-            ) == 1
-        } catch (e: Exception) {
-            // If we can't determine, assume it's enabled to avoid confusion
-            true
-        }
     }
 
     private fun stopPairingService() {
